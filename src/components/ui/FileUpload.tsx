@@ -313,8 +313,7 @@ export function FileUpload({
         startUpload(it);
       });
     },
-    [multiple, maxFiles, items.length, accept, maxSizeBytes, onUploadError, onUploadStart, startUpload, getVideoDuration],
-    [multiple, maxFiles, accept, maxSizeBytes, onUploadError, startUpload, getVideoDuration],
+    [multiple, maxFiles, items.length, accept, maxSizeBytes, onUploadError, onUploadStart, startUpload, getVideoDuration]
   );
 
   const removeItem = useCallback((id: string) => {
@@ -349,18 +348,9 @@ export function FileUpload({
       xhrRefs.current = {};
     };
   }, []);
-  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
-    // Ignore dragleave fired when the pointer moves onto a child element
-    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
-    setDragActive(false);
-  }
-
   function handleRetry(item: UploadItem) {
     updateItem(item.id, { status: 'uploading', progress: 0, errorMessage: undefined });
     onUploadStart?.();
-    startUpload({ ...item, status: 'uploading', progress: 0 });
-  function handleRetry(item: UploadItem) {
-    updateItem(item.id, { status: 'uploading', progress: 0, errorMessage: undefined });
     startUpload({ ...item, status: 'uploading', progress: 0, errorMessage: undefined });
   }
 

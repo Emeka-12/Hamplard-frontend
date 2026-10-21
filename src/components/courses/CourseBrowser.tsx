@@ -5,7 +5,6 @@ import { Search } from 'lucide-react';
 import { coursesApi } from '@/lib/api/services';
 import { CourseCardGrid } from './CourseCardGrid';
 import { CourseCardSkeleton } from '@/components/skeletons';
-import { CourseCardSkeleton } from '@/components/skeletons/CourseCardSkeleton';
 import { useInfiniteScroll } from '@/lib/hooks/useInfiniteScroll';
 import type { Course, Category } from '@/types';
 

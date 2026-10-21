@@ -3,27 +3,8 @@ import type {
   ApiResponse, PaginatedResponse, Course, Enrollment,
   Certificate, Notification, User, Category, Announcement,
   Bundle, StudentEnrollmentRow, StudentDetail, SavedPaymentMethod,
+  Gift, LeaderboardResponse, LeaderboardPeriod,
 } from '@/types';
-
-const isBrowser = typeof window !== 'undefined';
-const ANNOUNCEMENTS_STORAGE_KEY = 'hamplard_announcements';
-const NOTIFICATIONS_STORAGE_KEY = 'hamplard_notifications';
-const PAYMENT_METHODS_STORAGE_KEY = 'hamplard_payment_methods';
-
-const readStorage = <T,>(key: string, fallback: T): T => {
-  ApiResponse,
-  PaginatedResponse,
-  Course,
-  Enrollment,
-  Certificate,
-  Notification,
-  User,
-  Category,
-  Announcement,
-  Gift,
-  LeaderboardResponse,
-  LeaderboardPeriod,
-} from "@/types";
 
 const isBrowser = typeof window !== "undefined";
 const ANNOUNCEMENTS_STORAGE_KEY = "hamplard_announcements";
@@ -912,6 +893,11 @@ export const tagsApi = {
     const { data } = await apiClient.get<ApiResponse<string[]>>("/tags", {
       params: { q: query },
     });
+    return data.data;
+  },
+};
+
+// ----------------------------------------------------------
 // Instructor Applications
 // ----------------------------------------------------------
 export const instructorApplicationApi = {

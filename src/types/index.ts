@@ -71,6 +71,8 @@ export interface Material {
   quantity: number;
   unit: string;
   purchaseUrl: string | null;
+}
+
 export interface LessonStep {
   id: string;
   lessonId?: string;
@@ -136,9 +138,10 @@ export interface Course {
   createdAt: string;
   updatedAt: string;
   instructor: {
+    id?: string;
     name: string | null;
-    stellarAddress: string;
-    avatarUrl: string | null;
+    stellarAddress?: string;
+    avatarUrl?: string | null;
     bio?: string | null;
   };
   modules: CourseModule[];
