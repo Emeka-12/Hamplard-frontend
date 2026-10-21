@@ -71,6 +71,8 @@ export interface Material {
   quantity: number;
   unit: string;
   purchaseUrl: string | null;
+}
+
 export interface LessonStep {
   id: string;
   lessonId?: string;

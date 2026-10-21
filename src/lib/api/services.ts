@@ -10,26 +10,6 @@ const ANNOUNCEMENTS_STORAGE_KEY = 'hamplard_announcements';
 const NOTIFICATIONS_STORAGE_KEY = 'hamplard_notifications';
 const PAYMENT_METHODS_STORAGE_KEY = 'hamplard_payment_methods';
 
-const readStorage = <T,>(key: string, fallback: T): T => {
-  ApiResponse,
-  PaginatedResponse,
-  Course,
-  Enrollment,
-  Certificate,
-  Notification,
-  User,
-  Category,
-  Announcement,
-  Gift,
-  LeaderboardResponse,
-  LeaderboardPeriod,
-} from "@/types";
-
-const isBrowser = typeof window !== "undefined";
-const ANNOUNCEMENTS_STORAGE_KEY = "hamplard_announcements";
-const NOTIFICATIONS_STORAGE_KEY = "hamplard_notifications";
-const PAYMENT_METHODS_STORAGE_KEY = "hamplard_payment_methods";
-
 const readStorage = <T>(key: string, fallback: T): T => {
   if (!isBrowser) return fallback;
   try {
@@ -82,6 +62,20 @@ export const authApi = {
     const { data } = await apiClient.post<
       ApiResponse<{ accessToken: string; user: User }>
     >("/auth/email/login", payload);
+    return data.data;
+  },
+  requestPasswordReset: async (payload: { email: string }) => {
+    const { data } = await apiClient.post<ApiResponse<any>>(
+      "/auth/forgot-password",
+      payload,
+    );
+    return data.data;
+  },
+  resetPassword: async (payload: { token: string; password: string }) => {
+    const { data } = await apiClient.post<ApiResponse<any>>(
+      "/auth/reset-password",
+      payload,
+    );
     return data.data;
   },
 };
@@ -912,6 +906,11 @@ export const tagsApi = {
     const { data } = await apiClient.get<ApiResponse<string[]>>("/tags", {
       params: { q: query },
     });
+    return data.data;
+  },
+};
+
+// ----------------------------------------------------------
 // Instructor Applications
 // ----------------------------------------------------------
 export const instructorApplicationApi = {
