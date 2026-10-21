@@ -2,7 +2,7 @@ import { apiClient } from "./client";
 import type {
   ApiResponse, PaginatedResponse, Course, Enrollment,
   Certificate, Notification, User, Category, Announcement,
-  Bundle, StudentEnrollmentRow, StudentDetail,
+  Bundle, StudentEnrollmentRow, StudentDetail, SavedPaymentMethod,
 } from '@/types';
 
 const isBrowser = typeof window !== 'undefined';
