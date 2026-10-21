@@ -55,6 +55,7 @@ export default function LearnPage() {
   const [markError, setMarkError] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("lessons");
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ── Autoplay state ───────────────────────────────────────────────────────
   const [autoplay, setAutoplay] = useState<boolean>(() => {
@@ -254,7 +255,25 @@ export default function LearnPage() {
       )}
 
       {/* ── Lesson sidebar ──────────────────────────────────────────────── */}
-      <aside className="w-72 bg-white border-r border-ink-100 flex flex-col flex-shrink-0 overflow-y-auto">
+      <button
+        type="button"
+        onClick={() => setSidebarOpen((o) => !o)}
+        aria-expanded={sidebarOpen}
+        aria-controls="learn-curriculum"
+        className="md:hidden flex flex-shrink-0 items-center justify-between border-b border-ink-100 bg-white px-4 py-3 text-sm font-medium text-ink-700"
+      >
+        <span>Course content</span>
+        {sidebarOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+      </button>
+
+      <aside
+        id="learn-curriculum"
+        className={cn(
+          sidebarOpen ? 'flex' : 'hidden',
+          'md:flex w-full max-h-[40vh] md:max-h-none md:w-72 flex-col flex-shrink-0 overflow-y-auto',
+          'bg-white border-b border-ink-100 md:border-b-0 md:border-r',
+        )}
+      >
         {/* Header */}
         <div className="p-4 border-b border-ink-100">
           <Link
