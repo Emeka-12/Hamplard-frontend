@@ -56,7 +56,7 @@ export default function LearnPage() {
   const [markError, setMarkError] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("lessons");
   const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // ── Autoplay state ───────────────────────────────────────────────────────
   const [autoplay, setAutoplay] = useState<boolean>(() => {
