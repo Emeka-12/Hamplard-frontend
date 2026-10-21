@@ -2,15 +2,16 @@
 import axios, { AxiosError } from 'axios';
 import { getApiUrl } from './config';
 
+const baseURL = getApiUrl();
+
 export const apiClient = axios.create({
-  baseURL: getApiUrl(),
+  baseURL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 20_000,
 });
 
-// Update baseURL dynamically if it changes (shouldn't happen, but good practice)
+// ─── Request interceptor: attach auth token ───────────────────────────────
 apiClient.interceptors.request.use((config) => {
-  config.baseURL = getApiUrl();
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('hamplard_token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
