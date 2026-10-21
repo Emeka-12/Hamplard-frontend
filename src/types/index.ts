@@ -64,6 +64,23 @@ export interface VideoQualities {
   "360p"?: string;
 }
 
+export interface Material {
+  id: string;
+  lessonId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  purchaseUrl: string | null;
+export interface LessonStep {
+  id: string;
+  lessonId?: string;
+  stepNumber?: number;
+  title: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  timestamp?: number | null; // seconds
+}
+
 export interface Lesson {
   id: string;
   moduleId: string;
@@ -77,9 +94,13 @@ export interface Lesson {
   quiz?: QuizQuestion[] | null;
   position: number;
   isFree: boolean;
+  materials?: Material[];
   /** Optional per-resolution URLs. When absent only 'auto' is available. */
   videoQualities?: VideoQualities;
+  steps?: LessonStep[] | null;
 }
+
+export type ModuleUnlockRule = 'immediate' | 'prerequisite' | 'date';
 
 export interface CourseModule {
   id: string;
@@ -87,6 +108,9 @@ export interface CourseModule {
   title: string;
   position: number;
   lessons: Lesson[];
+  unlockRule?: ModuleUnlockRule;
+  prerequisiteModuleId?: string | null;
+  releaseDate?: string | null;
 }
 
 export interface Course {

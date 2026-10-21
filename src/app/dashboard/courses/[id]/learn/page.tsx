@@ -4,11 +4,12 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   CheckCircle2, Circle, ChevronDown, ChevronRight,
-  Download, Loader2, ArrowLeft, Award, SkipForward, MessageSquare,
+  Download, Loader2, ArrowLeft, Award, SkipForward, MessageSquare, Lock,
 } from 'lucide-react';
 import Link from 'next/link';
 import { coursesApi, enrollmentsApi, lessonsApi } from '@/lib/api/services';
 import { formatDuration, cn } from '@/lib/utils';
+import { useToast } from '@/lib/hooks/use-toast';
 import { sanitizeHtml } from '@/lib/utils/sanitize';
 import CourseCompletionModal from '@/components/learn/CourseCompletionModal';
 import { AssignmentSubmission } from '@/components/learn/AssignmentSubmission';
@@ -16,6 +17,8 @@ import { VideoPlayer } from '@/components/learn/VideoPlayer';
 import { AutoplayCountdown } from '@/components/learn/AutoplayCountdown';
 import NotesPanel from '@/components/learn/NotesPanel';
 import { QuizComponent } from '@/components/learn/QuizComponent';
+import { StepChecklist } from '@/components/learn/StepChecklist';
+import { getModuleLockInfo } from '@/components/learn/LearnSidebar';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import type { Course, Enrollment, Lesson, QuizQuestion } from '@/types';
 
@@ -41,6 +44,7 @@ export default function LearnPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
   // requestedLessonId reserved for future deep-link support
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _requestedLessonId = searchParams.get("lesson");
@@ -70,6 +74,21 @@ export default function LearnPage() {
 
   // videoRef forwarded into VideoPlayer so NotesPanel can read current time
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const completedIds = useMemo(() => {
+    return new Set(
+      enrollment?.lessonProgress
+        ?.filter((p: { completed: boolean }) => p.completed)
+        .map((p: { lessonId: string }) => p.lessonId) ?? [],
+    );
+  }, [enrollment]);
+
+  const handleSeek = useCallback((timestamp: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = timestamp;
+      videoRef.current.play?.().catch(() => {});
+    }
+  }, []);
 
   // ── Derived: next lesson ─────────────────────────────────────────────────
   const nextLesson = useMemo<Lesson | null>(() => {
@@ -102,10 +121,24 @@ export default function LearnPage() {
 
   // ── Navigate to next lecture ─────────────────────────────────────────────
   const goToNext = useCallback(() => {
-    if (!nextLesson) return;
+    if (!nextLesson || !course) return;
+    const nextModIdx = course.modules?.findIndex((m) =>
+      m.lessons.some((l) => l.id === nextLesson.id),
+    ) ?? -1;
+    if (nextModIdx !== -1 && course.modules) {
+      const lock = getModuleLockInfo(course.modules[nextModIdx], nextModIdx, course.modules, completedIds);
+      if (lock.isLocked) {
+        toast.warning({
+          title: 'Lesson Locked',
+          description: lock.reason || 'This lesson is currently locked.',
+        });
+        setShowCountdown(false);
+        return;
+      }
+    }
     setShowCountdown(false);
     setActiveLesson(nextLesson);
-  }, [nextLesson]);
+  }, [nextLesson, course, completedIds, toast]);
 
   const cancelCountdown = useCallback(() => {
     setShowCountdown(false);
@@ -123,12 +156,20 @@ export default function LearnPage() {
       setEnrollment(e);
       // Open first module by default
       if (c.modules?.[0]) setExpanded({ [c.modules[0].id]: true });
-      // Start from first incomplete lesson
+      // Start from first incomplete, non-locked lesson
       const allLessons = flatLessons(c);
-      const completedIds = new Set(
+      const completedSet = new Set(
         e.lessonProgress?.filter((p: { completed: boolean }) => p.completed).map((p: { lessonId: string }) => p.lessonId),
       );
-      const first = allLessons.find((l) => !completedIds.has(l.id)) ?? allLessons[0];
+      const first = allLessons.find((l) => {
+        if (completedSet.has(l.id)) return false;
+        const modIdx = c.modules?.findIndex((m) => m.lessons.some((ml) => ml.id === l.id)) ?? -1;
+        if (modIdx !== -1 && c.modules) {
+          const lock = getModuleLockInfo(c.modules[modIdx], modIdx, c.modules, completedSet);
+          if (lock.isLocked) return false;
+        }
+        return true;
+      }) ?? allLessons[0];
       if (first) setActiveLesson(first);
     })
     .catch((err) => {
@@ -297,7 +338,11 @@ export default function LearnPage() {
         {/* Modules + lessons */}
         {sidebarTab === "lessons" && (
           <div className="flex-1">
-            {course.modules?.map((module) => (
+            {course.modules?.map((module, mIdx) => {
+              const lockInfo = getModuleLockInfo(module, mIdx, course.modules ?? [], completedIds);
+              const isLocked = lockInfo.isLocked;
+
+              return (
               <div key={module.id} className="border-b border-ink-50">
                 <button
                   onClick={() =>
@@ -311,7 +356,12 @@ export default function LearnPage() {
                       {module.lessons.length} lesson{module.lessons.length !== 1 ? 's' : ''}
                     </p>
                   </div>
-                  {expanded[module.id] ? (
+                  {isLocked ? (
+                    <div className="flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-medium border border-amber-200 flex-shrink-0">
+                      <Lock className="w-3 h-3" />
+                      <span>{lockInfo.reason}</span>
+                    </div>
+                  ) : expanded[module.id] ? (
                     <ChevronDown className="w-3.5 h-3.5 text-ink-400 flex-shrink-0" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-ink-400 flex-shrink-0" />
@@ -326,13 +376,25 @@ export default function LearnPage() {
                       return (
                         <button
                           key={lesson.id}
-                          onClick={() => setActiveLesson(lesson)}
+                          onClick={() => {
+                            if (isLocked) {
+                              toast.warning({
+                                title: 'Lesson Locked',
+                                description: lockInfo.reason || 'Complete previous module to unlock this lesson.',
+                              });
+                              return;
+                            }
+                            setActiveLesson(lesson);
+                          }}
                           className={cn(
                             'w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors',
                             active ? 'bg-saffron-50' : 'hover:bg-ink-50',
+                            isLocked && 'opacity-80 cursor-not-allowed',
                           )}
                         >
-                          {done ? (
+                          {isLocked ? (
+                            <Lock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                          ) : done ? (
                             <CheckCircle2 className="w-4 h-4 text-leaf-500 flex-shrink-0 mt-0.5" />
                           ) : (
                             <Circle
@@ -342,24 +404,30 @@ export default function LearnPage() {
                               )}
                             />
                           )}
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p
                               className={cn(
                                 'text-xs leading-snug',
                                 active
                                   ? 'font-semibold text-saffron-700'
-                                  : done
-                                    ? 'text-ink-500'
-                                    : 'text-ink-700',
+                                  : isLocked
+                                    ? 'text-ink-400'
+                                    : done
+                                      ? 'text-ink-500'
+                                      : 'text-ink-700',
                               )}
                             >
                               {lesson.title}
                             </p>
-                            {lesson.videoDuration && (
+                            {isLocked && lockInfo.reason ? (
+                              <p className="text-[10px] text-amber-600 mt-0.5">
+                                {lockInfo.reason}
+                              </p>
+                            ) : lesson.videoDuration ? (
                               <p className="text-[10px] text-ink-400 mt-0.5">
                                 {formatDuration(lesson.videoDuration)}
                               </p>
-                            )}
+                            ) : null}
                           </div>
                         </button>
                       );
@@ -367,7 +435,8 @@ export default function LearnPage() {
                   </div>
                 )}
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
 
@@ -434,6 +503,17 @@ export default function LearnPage() {
                   />
                 )}
               </div>
+            )}
+
+            {/* Step-by-step practical checklist */}
+            {activeLesson.steps && activeLesson.steps.length > 0 && (
+              <StepChecklist
+                key={activeLesson.id}
+                lessonId={activeLesson.id}
+                steps={activeLesson.steps}
+                onSeek={handleSeek}
+                className="mb-5"
+              />
             )}
 
             {/* Text content */}
