@@ -2,7 +2,7 @@ import { apiClient } from "./client";
 import type {
   ApiResponse, PaginatedResponse, Course, Enrollment,
   Certificate, Notification, User, Category, Announcement,
-  Bundle, StudentEnrollmentRow, StudentDetail,
+  Bundle, StudentEnrollmentRow, StudentDetail, SavedPaymentMethod,
 } from '@/types';
 
 const isBrowser = typeof window !== 'undefined';
@@ -11,22 +11,6 @@ const NOTIFICATIONS_STORAGE_KEY = 'hamplard_notifications';
 const PAYMENT_METHODS_STORAGE_KEY = 'hamplard_payment_methods';
 
 const readStorage = <T,>(key: string, fallback: T): T => {
-  ApiResponse,
-  PaginatedResponse,
-  Course,
-  Enrollment,
-  Certificate,
-  Notification,
-  User,
-  Category,
-  Announcement,
-} from "@/types";
-
-const isBrowser = typeof window !== "undefined";
-const ANNOUNCEMENTS_STORAGE_KEY = "hamplard_announcements";
-const NOTIFICATIONS_STORAGE_KEY = "hamplard_notifications";
-
-const readStorage = <T>(key: string, fallback: T): T => {
   if (!isBrowser) return fallback;
   try {
     const raw = localStorage.getItem(key);
