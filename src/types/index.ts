@@ -64,6 +64,13 @@ export interface VideoQualities {
   "360p"?: string;
 }
 
+export interface Material {
+  id: string;
+  lessonId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  purchaseUrl: string | null;
 export interface LessonStep {
   id: string;
   lessonId?: string;
@@ -87,6 +94,7 @@ export interface Lesson {
   quiz?: QuizQuestion[] | null;
   position: number;
   isFree: boolean;
+  materials?: Material[];
   /** Optional per-resolution URLs. When absent only 'auto' is available. */
   videoQualities?: VideoQualities;
   steps?: LessonStep[] | null;
