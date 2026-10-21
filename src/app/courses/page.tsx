@@ -1,77 +1,25 @@
 import type { Metadata } from 'next';
-import { Suspense, useEffect, useState, useCallback } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { SlidersHorizontal, X } from 'lucide-react';
-import { coursesApi } from '@/lib/api/services';
-import { CourseCard } from '@/components/courses/CourseCard';
-import { CourseCardSkeleton } from '@/components/skeletons';
-import { FilterSidebar } from '@/components/courses/FilterSidebar';
-import { Pagination } from '@/components/ui/Pagination';
-import { CompareBar } from '@/components/courses/CompareBar';
-import { useInfiniteScroll } from '@/lib/hooks/useInfiniteScroll';
-import { cn } from '@/lib/utils';
+import { Suspense } from 'react';
 import { buildPaginatedMetadata } from '@/lib/seo';
-import type { Course, Category } from '@/types';
+import { CourseBrowseClient } from './CourseBrowseClient';
 
 type PageProps = {
   searchParams: { page?: string };
 };
 
-/**
- * Generate SEO metadata for the courses browse page with pagination support.
- * - Canonical URL always points to page 1 (no page parameter)
- * - rel="prev" and rel="next" links for pagination SEO
- * - All URLs are absolute including domain
- */
 export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
-  const pageParam = searchParams.page;
-  const currentPage = pageParam ? parseInt(pageParam, 10) : 1;
-
-  // Estimate total pages based on typical course count
-  // This ensures pagination links are generated correctly
-  const totalPages = 50;
-
+  const currentPage = searchParams.page ? parseInt(searchParams.page, 10) : 1;
   return buildPaginatedMetadata({
     title: 'Browse Courses',
-    description: 'Discover skills from expert instructors across Africa and beyond. Learn tailoring, makeup, baking, photography, hairstyling, and more.',
+    description:
+      'Discover skills from expert instructors across Africa and beyond. Learn tailoring, makeup, baking, photography, hairstyling, and more.',
     basePath: '/courses',
     currentPage,
-    totalPages,
+    totalPages: 50,
   });
 }
 
-'use client';
-
-// ── Constants ─────────────────────────────────────────────────────
-const SORT_OPTIONS = [
-  { label: 'Most Relevant', value: 'relevant' },
-  { label: 'Highest Rated', value: 'rated' },
-  { label: 'Most Popular', value: 'popular' },
-  { label: 'Newest', value: 'newest' },
-] as const;
-
-const PAGE_SIZE = 12;
-
-// ── Active filter chip ────────────────────────────────────────────
-function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-saffron-50 text-saffron-700 text-xs font-medium border border-saffron-200">
-      {label}
-      <button
-        onClick={onRemove}
-        aria-label={`Remove ${label} filter`}
-        className="hover:text-saffron-900 transition-colors"
-      >
-        <X className="w-3 h-3" />
-      </button>
-    </span>
-  );
-}
-
-// ── Main page ─────────────────────────────────────────────────────
-export default function CourseBrowsePage() {
-  const router = useRouter();
-  const pathname = usePathname();
+export default function CoursesPage() {
   return (
     <Suspense
       fallback={
@@ -84,8 +32,8 @@ export default function CourseBrowsePage() {
               <div className="space-y-4">
                 <div className="h-10 w-40 rounded bg-ink-100" />
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <div key={index} className="h-56 rounded-xl bg-ink-100" />
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-56 rounded-xl bg-ink-100" />
                   ))}
                 </div>
               </div>
@@ -94,7 +42,7 @@ export default function CourseBrowsePage() {
         </div>
       }
     >
-      <CourseBrowsePageContent />
+      <CourseBrowseClient />
     </Suspense>
   );
 }
@@ -146,6 +94,8 @@ function CourseBrowsePageContent() {
       sorted.sort((a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
+    } else if (urlSort === 'rated') {
+      sorted.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     }
     if (urlPrice) {
       sorted = sorted.filter((c) => {
@@ -163,8 +113,17 @@ function CourseBrowsePageContent() {
         sorted = sorted.filter((c) => (c.rating ?? 0) >= minRating);
       }
     }
+    if (urlDuration) {
+      sorted = sorted.filter((c) => {
+        const d = c.totalDuration ?? 0;
+        if (urlDuration === 'short') return d <= 2 * 3600;
+        if (urlDuration === 'medium') return d > 2 * 3600 && d <= 6 * 3600;
+        if (urlDuration === 'long') return d > 6 * 3600;
+        return true;
+      });
+    }
     return sorted;
-  }, [urlSort, urlPrice, urlRating]);
+  }, [urlSort, urlPrice, urlRating, urlDuration]);
 
   // Initial / filter change fetch
   useEffect(() => {
@@ -196,7 +155,7 @@ function CourseBrowsePageContent() {
       });
 
     return () => { cancelled = true; };
-  }, [urlCategory, urlLevel, urlSearch, applyClientFilters]);
+  }, [urlCategory, urlLevel, urlSearch, urlDuration, applyClientFilters]);
 
   // Read current page from URL parameter
   const urlPageParam = searchParams.get('page');
