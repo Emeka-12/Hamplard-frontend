@@ -8,8 +8,9 @@ export const apiClient = axios.create({
   timeout: 20_000,
 });
 
-// ─── Request interceptor: attach auth token ───────────────────────────────
+// Update baseURL dynamically if it changes (shouldn't happen, but good practice)
 apiClient.interceptors.request.use((config) => {
+  config.baseURL = getApiUrl();
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('hamplard_token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
