@@ -17,6 +17,8 @@ import {
   ClipboardCheck,
   ChevronLeft,
   ChevronRight,
+  Star,
+  MessageCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
@@ -48,6 +50,8 @@ const INSTRUCTOR_NAV: NavItem[] = [
   { href: '/dashboard/instructor/courses', label: 'My Courses', icon: BookOpen },
   { href: '/dashboard/courses/create', label: 'New Course', icon: Video },
   { href: '/dashboard/instructor/assignments', label: 'Assignments', icon: ClipboardCheck },
+  { href: '/dashboard/instructor/reviews', label: 'Reviews', icon: Star },
+  { href: '/dashboard/instructor/qa', label: 'Q&A Inbox', icon: MessageCircle },
   { href: '/dashboard/instructor/announcements', label: 'Announcements', icon: Bell },
   { href: '/notifications', label: 'Notifications', icon: Bell },
 ];
