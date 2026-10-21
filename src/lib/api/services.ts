@@ -20,11 +20,15 @@ const readStorage = <T,>(key: string, fallback: T): T => {
   User,
   Category,
   Announcement,
+  Gift,
+  LeaderboardResponse,
+  LeaderboardPeriod,
 } from "@/types";
 
 const isBrowser = typeof window !== "undefined";
 const ANNOUNCEMENTS_STORAGE_KEY = "hamplard_announcements";
 const NOTIFICATIONS_STORAGE_KEY = "hamplard_notifications";
+const PAYMENT_METHODS_STORAGE_KEY = "hamplard_payment_methods";
 
 const readStorage = <T>(key: string, fallback: T): T => {
   if (!isBrowser) return fallback;
@@ -864,6 +868,50 @@ export const twoFactorApi = {
 
 
 // ----------------------------------------------------------
+// Gifts
+// ----------------------------------------------------------
+export const giftsApi = {
+  create: async (payload: {
+    courseId: string;
+    recipientEmail: string;
+    message?: string;
+    deliveryDate?: string;
+  }): Promise<Gift> => {
+    const { data } = await apiClient.post<ApiResponse<Gift>>("/gifts", payload);
+    return data.data;
+  },
+
+  getByToken: async (token: string): Promise<Gift> => {
+    const { data } = await apiClient.get<ApiResponse<Gift>>(`/gifts/claim/${token}`);
+    return data.data;
+  },
+
+  claim: async (token: string): Promise<Gift> => {
+    const { data } = await apiClient.post<ApiResponse<Gift>>(`/gifts/claim/${token}`);
+    return data.data;
+  },
+};
+
+// ----------------------------------------------------------
+// Leaderboard
+// ----------------------------------------------------------
+export const leaderboardApi = {
+  get: async (period: LeaderboardPeriod = "week"): Promise<LeaderboardResponse> => {
+    const { data } = await apiClient.get<ApiResponse<LeaderboardResponse>>("/leaderboard", {
+      params: { period },
+    });
+    return data.data;
+  },
+};
+
+// ----------------------------------------------------------
+// Tags
+// ----------------------------------------------------------
+export const tagsApi = {
+  search: async (query: string): Promise<string[]> => {
+    const { data } = await apiClient.get<ApiResponse<string[]>>("/tags", {
+      params: { q: query },
+    });
 // Instructor Applications
 // ----------------------------------------------------------
 export const instructorApplicationApi = {
