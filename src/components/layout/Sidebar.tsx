@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BookOpen,
   Video,
@@ -17,12 +17,15 @@ import {
   ClipboardCheck,
   ChevronLeft,
   ChevronRight,
+  MessageSquare,
+  Medal,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { useWishlistCount } from '@/lib/hooks/use-wishlist-store';
 import { shortAddress, cn } from '@/lib/utils';
 import { ProfileCompletion } from '@/components/dashboard/ProfileCompletion';
+import { messagesApi } from '@/lib/api/services';
 
 interface NavItem {
   href: string;
@@ -30,11 +33,15 @@ interface NavItem {
   icon: LucideIcon;
   /** Renders the saved-course count alongside the label. */
   showWishlistCount?: boolean;
+  /** Renders the unread messages count alongside the label. */
+  showMessagesBadge?: boolean;
 }
 
 const STUDENT_NAV: NavItem[] = [
   { href: '/dashboard/my-courses', label: 'My Courses', icon: BookOpen },
   { href: '/dashboard/progress', label: 'Progress', icon: BarChart2 },
+  { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare, showMessagesBadge: true },
+  { href: '/dashboard/achievements', label: 'Achievements', icon: Medal },
   { href: '/dashboard/wishlist', label: 'Wishlist', icon: Heart, showWishlistCount: true },
   { href: '/dashboard/certificates', label: 'Certificates', icon: Award },
   { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
@@ -47,6 +54,7 @@ const INSTRUCTOR_NAV: NavItem[] = [
   { href: '/dashboard/instructor', label: 'Dashboard', icon: BarChart2 },
   { href: '/dashboard/instructor/courses', label: 'My Courses', icon: BookOpen },
   { href: '/dashboard/courses/create', label: 'New Course', icon: Video },
+  { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare, showMessagesBadge: true },
   { href: '/dashboard/instructor/assignments', label: 'Assignments', icon: ClipboardCheck },
   { href: '/dashboard/instructor/announcements', label: 'Announcements', icon: Bell },
   { href: '/notifications', label: 'Notifications', icon: Bell },
@@ -66,6 +74,17 @@ export function Sidebar() {
   });
   const { user, address, logout } = useAuthStore();
   const wishlistCount = useWishlistCount();
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
+  useEffect(() => {
+    const syncUnread = () => {
+      messagesApi.getUnreadCount().then(setUnreadMessages).catch(() => {});
+    };
+    syncUnread();
+    window.addEventListener('hamplard:messages-updated', syncUnread);
+    return () => window.removeEventListener('hamplard:messages-updated', syncUnread);
+  }, []);
+
   const isInstructor = user?.role === 'INSTRUCTOR' || user?.role === 'ADMIN';
   const nav = isInstructor ? INSTRUCTOR_NAV : STUDENT_NAV;
 
@@ -114,17 +133,21 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className={cn('flex-1 py-4 space-y-0.5', collapsed ? 'px-2' : 'px-3')}>
-        {nav.map(({ href, label, icon: Icon, showWishlistCount }) => {
+        {nav.map(({ href, label, icon: Icon, showWishlistCount, showMessagesBadge }) => {
           const active = pathname === href || pathname.startsWith(href + '/');
+          const hasUnread = showMessagesBadge && unreadMessages > 0;
           return (
             <Link key={href} href={href} className={cn(
-              'flex items-center rounded-xl py-2.5 text-sm font-medium transition-all',
+              'relative flex items-center rounded-xl py-2.5 text-sm font-medium transition-all',
               collapsed ? 'justify-center px-2' : 'gap-3 px-3',
               active
                 ? 'bg-saffron-50 text-saffron-700'
                 : 'text-ink-600 hover:bg-ink-50 hover:text-ink-900',
             )} aria-label={collapsed ? label : undefined} title={collapsed ? label : undefined}>
               <Icon className={cn('h-4 w-4 flex-shrink-0', active ? 'text-saffron-600' : 'text-ink-400')} />
+              {collapsed && hasUnread && (
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-hamplard-primary" />
+              )}
               {!collapsed && label}
               {!collapsed && showWishlistCount && wishlistCount > 0 && (
                 <span
@@ -132,6 +155,14 @@ export function Sidebar() {
                   aria-label={`${wishlistCount} saved course${wishlistCount !== 1 ? 's' : ''}`}
                 >
                   {wishlistCount}
+                </span>
+              )}
+              {!collapsed && hasUnread && (
+                <span
+                  className="ml-auto min-w-5 px-1.5 py-0.5 rounded-full bg-hamplard-primary text-white text-[10px] font-semibold text-center"
+                  aria-label={`${unreadMessages} unread message${unreadMessages !== 1 ? 's' : ''}`}
+                >
+                  {unreadMessages}
                 </span>
               )}
             </Link>

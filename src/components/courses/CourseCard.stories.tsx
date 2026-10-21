@@ -20,7 +20,7 @@ const mockCourse: Course = {
   thumbnailUrl: 'https://images.unsplash.com/photo-1633356122544-f134324ef6db?w=500&h=300&fit=crop',
   previewVideoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
   _count: { enrollments: 3500 },
-};
+} as unknown as Course;
 
 const meta = {
   title: 'Components/CourseCard',
@@ -51,7 +51,7 @@ export const NoRating: Story = {
   args: {
     course: {
       ...mockCourse,
-      rating: null,
+      rating: undefined,
       reviewCount: 0,
     },
   },
@@ -70,7 +70,7 @@ export const NoPreview: Story = {
   args: {
     course: {
       ...mockCourse,
-      previewVideoUrl: undefined,
+      previewVideoUrl: null,
     },
   },
 };

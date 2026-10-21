@@ -3,27 +3,9 @@ import type {
   ApiResponse, PaginatedResponse, Course, Enrollment,
   Certificate, Notification, User, Category, Announcement,
   Bundle, StudentEnrollmentRow, StudentDetail, SavedPaymentMethod,
+  Gift, LeaderboardResponse, LeaderboardPeriod, Achievement,
+  DirectMessage, Conversation, MessageAttachment,
 } from '@/types';
-
-const isBrowser = typeof window !== 'undefined';
-const ANNOUNCEMENTS_STORAGE_KEY = 'hamplard_announcements';
-const NOTIFICATIONS_STORAGE_KEY = 'hamplard_notifications';
-const PAYMENT_METHODS_STORAGE_KEY = 'hamplard_payment_methods';
-
-const readStorage = <T,>(key: string, fallback: T): T => {
-  ApiResponse,
-  PaginatedResponse,
-  Course,
-  Enrollment,
-  Certificate,
-  Notification,
-  User,
-  Category,
-  Announcement,
-  Gift,
-  LeaderboardResponse,
-  LeaderboardPeriod,
-} from "@/types";
 
 const isBrowser = typeof window !== "undefined";
 const ANNOUNCEMENTS_STORAGE_KEY = "hamplard_announcements";
@@ -912,6 +894,11 @@ export const tagsApi = {
     const { data } = await apiClient.get<ApiResponse<string[]>>("/tags", {
       params: { q: query },
     });
+    return data.data;
+  },
+};
+
+// ----------------------------------------------------------
 // Instructor Applications
 // ----------------------------------------------------------
 export const instructorApplicationApi = {
@@ -929,3 +916,361 @@ export const instructorApplicationApi = {
     return data.data;
   },
 };
+
+// ----------------------------------------------------------
+// Achievements & Badges
+// ----------------------------------------------------------
+const ACHIEVEMENTS_STORAGE_KEY = "hamplard_achievements";
+
+export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
+  {
+    id: "first-lesson",
+    title: "First Step",
+    description: "Completed your first lesson on Hamplard.",
+    criteria: "Complete any 1 lesson in any enrolled course.",
+    icon: "BookOpen",
+    category: "learning",
+    earned: true,
+    earnedAt: "2026-10-18T10:00:00.000Z",
+    progress: 100,
+    rarity: "common",
+  },
+  {
+    id: "streak-7",
+    title: "7-Day Streak",
+    description: "Learned consistently for 7 consecutive days.",
+    criteria: "Maintain an uninterrupted learning streak of 7 days.",
+    icon: "Flame",
+    category: "streak",
+    earned: true,
+    earnedAt: "2026-10-20T12:00:00.000Z",
+    progress: 100,
+    rarity: "rare",
+  },
+  {
+    id: "first-assignment",
+    title: "Project Pioneer",
+    description: "Submitted an assignment and received instructor approval.",
+    criteria: "Submit a project assignment and have it approved by the course instructor.",
+    icon: "ClipboardCheck",
+    category: "learning",
+    earned: false,
+    earnedAt: null,
+    progress: 50,
+    rarity: "rare",
+  },
+  {
+    id: "first-certificate",
+    title: "Certified Creator",
+    description: "Completed a full course curriculum and minted a Stellar certificate.",
+    criteria: "Finish all course modules and receive a cryptographically verified certificate.",
+    icon: "Award",
+    category: "certificates",
+    earned: false,
+    earnedAt: null,
+    progress: 80,
+    rarity: "epic",
+  },
+  {
+    id: "speed-learner",
+    title: "Quick Study",
+    description: "Completed 3 lessons in a single 24-hour window.",
+    criteria: "Complete at least 3 distinct lessons within one day.",
+    icon: "Zap",
+    category: "learning",
+    earned: true,
+    earnedAt: "2026-10-19T14:30:00.000Z",
+    progress: 100,
+    rarity: "common",
+  },
+  {
+    id: "quiz-master",
+    title: "Ace Student",
+    description: "Achieved a 100% score on a module quiz.",
+    criteria: "Answer every question correctly in any graded course quiz.",
+    icon: "GraduationCap",
+    category: "learning",
+    earned: false,
+    earnedAt: null,
+    progress: 60,
+    rarity: "rare",
+  },
+  {
+    id: "night-owl",
+    title: "Midnight Scholar",
+    description: "Finished a lesson during evening hours (10 PM – 4 AM).",
+    criteria: "Complete a lesson between 10:00 PM and 4:00 AM local time.",
+    icon: "Moon",
+    category: "streak",
+    earned: false,
+    earnedAt: null,
+    progress: 0,
+    rarity: "common",
+  },
+  {
+    id: "master-polymath",
+    title: "Vocational Master",
+    description: "Enrolled in 3 different vocational skill tracks.",
+    criteria: "Enroll and participate in courses across 3 different craft categories.",
+    icon: "Trophy",
+    category: "community",
+    earned: false,
+    earnedAt: null,
+    progress: 66,
+    rarity: "legendary",
+  },
+];
+
+export const achievementsApi = {
+  getAll: async (): Promise<Achievement[]> => {
+    return readStorage<Achievement[]>(ACHIEVEMENTS_STORAGE_KEY, DEFAULT_ACHIEVEMENTS);
+  },
+  getSummary: async (): Promise<{ earned: Achievement[]; locked: Achievement[]; total: number }> => {
+    const all = await achievementsApi.getAll();
+    const earned = all.filter((a) => a.earned);
+    const locked = all.filter((a) => !a.earned);
+    return { earned, locked, total: all.length };
+  },
+  award: async (id: string): Promise<Achievement | null> => {
+    const all = await achievementsApi.getAll();
+    const index = all.findIndex((a) => a.id === id);
+    if (index === -1) return null;
+    const updated = {
+      ...all[index],
+      earned: true,
+      earnedAt: new Date().toISOString(),
+      progress: 100,
+    };
+    all[index] = updated;
+    writeStorage(ACHIEVEMENTS_STORAGE_KEY, all);
+    if (isBrowser) {
+      window.dispatchEvent(new CustomEvent('hamplard:achievement-earned', { detail: updated }));
+    }
+    return updated;
+  },
+};
+
+// ----------------------------------------------------------
+// Student Messages
+// ----------------------------------------------------------
+const CONVERSATIONS_STORAGE_KEY = "hamplard_conversations";
+const MESSAGES_STORAGE_PREFIX = "hamplard_thread_";
+
+export const DEFAULT_CONVERSATIONS: Conversation[] = [
+  {
+    id: "conv-1",
+    participantId: "inst-1",
+    participantName: "Amina Adeleke",
+    participantAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
+    participantRole: "INSTRUCTOR",
+    courseId: "1",
+    courseTitle: "Modern Tailoring & Garment Construction",
+    lastMessage: {
+      id: "msg-1-3",
+      conversationId: "conv-1",
+      senderId: "inst-1",
+      senderName: "Amina Adeleke",
+      senderRole: "INSTRUCTOR",
+      content: "Your French seam photo looks wonderful! Make sure to press after stitching.",
+      createdAt: "2026-10-21T18:30:00.000Z",
+      read: false,
+    },
+    unreadCount: 1,
+    updatedAt: "2026-10-21T18:30:00.000Z",
+  },
+  {
+    id: "conv-2",
+    participantId: "inst-2",
+    participantName: "Chidi Okafor",
+    participantAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80",
+    participantRole: "INSTRUCTOR",
+    courseId: "2",
+    courseTitle: "Professional Bridal Makeup Artistry",
+    lastMessage: {
+      id: "msg-2-2",
+      conversationId: "conv-2",
+      senderId: "inst-2",
+      senderName: "Chidi Okafor",
+      senderRole: "INSTRUCTOR",
+      content: "Let me know when you try the warm undertone foundation blend exercise.",
+      createdAt: "2026-10-21T15:00:00.000Z",
+      read: true,
+    },
+    unreadCount: 0,
+    updatedAt: "2026-10-21T15:00:00.000Z",
+  },
+  {
+    id: "conv-3",
+    participantId: "inst-3",
+    participantName: "Zainab Bello",
+    participantAvatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80",
+    participantRole: "INSTRUCTOR",
+    courseId: "3",
+    courseTitle: "Artisanal Baking & Pastry Arts",
+    lastMessage: {
+      id: "msg-3-1",
+      conversationId: "conv-3",
+      senderId: "inst-3",
+      senderName: "Zainab Bello",
+      senderRole: "INSTRUCTOR",
+      content: "Welcome to the sourdough masterclass! Feel free to share your starter fermentation questions here.",
+      createdAt: "2026-10-20T09:00:00.000Z",
+      read: true,
+    },
+    unreadCount: 0,
+    updatedAt: "2026-10-20T09:00:00.000Z",
+  },
+];
+
+export const messagesApi = {
+  getConversations: async (): Promise<Conversation[]> => {
+    return readStorage<Conversation[]>(CONVERSATIONS_STORAGE_KEY, DEFAULT_CONVERSATIONS);
+  },
+  getMessages: async (conversationId: string): Promise<DirectMessage[]> => {
+    const defaultMessages: Record<string, DirectMessage[]> = {
+      "conv-1": [
+        {
+          id: "msg-1-1",
+          conversationId: "conv-1",
+          senderId: "student-1",
+          senderName: "You",
+          senderRole: "STUDENT",
+          content: "Hello instructor Amina! I have completed step 3 on French seams. Here is my seam sample.",
+          createdAt: "2026-10-21T17:30:00.000Z",
+          read: true,
+        },
+        {
+          id: "msg-1-2",
+          conversationId: "conv-1",
+          senderId: "inst-1",
+          senderName: "Amina Adeleke",
+          senderRole: "INSTRUCTOR",
+          content: "Hi! Great work getting to module 2 so quickly. Looking at the seam now.",
+          createdAt: "2026-10-21T18:00:00.000Z",
+          read: true,
+        },
+        {
+          id: "msg-1-3",
+          conversationId: "conv-1",
+          senderId: "inst-1",
+          senderName: "Amina Adeleke",
+          senderRole: "INSTRUCTOR",
+          content: "Your French seam photo looks wonderful! Make sure to press after stitching.",
+          createdAt: "2026-10-21T18:30:00.000Z",
+          read: false,
+        },
+      ],
+      "conv-2": [
+        {
+          id: "msg-2-1",
+          conversationId: "conv-2",
+          senderId: "student-1",
+          senderName: "You",
+          senderRole: "STUDENT",
+          content: "Hi Chidi! What lighting setup do you recommend for contouring practice?",
+          createdAt: "2026-10-21T13:00:00.000Z",
+          read: true,
+        },
+        {
+          id: "msg-2-2",
+          conversationId: "conv-2",
+          senderId: "inst-2",
+          senderName: "Chidi Okafor",
+          senderRole: "INSTRUCTOR",
+          content: "Let me know when you try the warm undertone foundation blend exercise.",
+          createdAt: "2026-10-21T15:00:00.000Z",
+          read: true,
+        },
+      ],
+      "conv-3": [
+        {
+          id: "msg-3-1",
+          conversationId: "conv-3",
+          senderId: "inst-3",
+          senderName: "Zainab Bello",
+          senderRole: "INSTRUCTOR",
+          content: "Welcome to the sourdough masterclass! Feel free to share your starter fermentation questions here.",
+          createdAt: "2026-10-20T09:00:00.000Z",
+          read: true,
+        },
+      ],
+    };
+
+    return readStorage<DirectMessage[]>(
+      `${MESSAGES_STORAGE_PREFIX}${conversationId}`,
+      defaultMessages[conversationId] ?? []
+    );
+  },
+  sendMessage: async (
+    conversationId: string,
+    content: string,
+    attachments: MessageAttachment[] = []
+  ): Promise<DirectMessage> => {
+    const current = await messagesApi.getMessages(conversationId);
+    const newMessage: DirectMessage = {
+      id: `msg-${Date.now()}`,
+      conversationId,
+      senderId: "student-me",
+      senderName: "You",
+      senderRole: "STUDENT",
+      content,
+      attachments,
+      createdAt: new Date().toISOString(),
+      read: true,
+    };
+    const updated = [...current, newMessage];
+    writeStorage(`${MESSAGES_STORAGE_PREFIX}${conversationId}`, updated);
+
+    // Update conversation last message
+    const conversations = await messagesApi.getConversations();
+    const convIndex = conversations.findIndex((c) => c.id === conversationId);
+    if (convIndex !== -1) {
+      conversations[convIndex] = {
+        ...conversations[convIndex],
+        lastMessage: newMessage,
+        updatedAt: newMessage.createdAt,
+      };
+      writeStorage(CONVERSATIONS_STORAGE_KEY, conversations);
+    }
+
+    if (isBrowser) {
+      window.dispatchEvent(new CustomEvent('hamplard:messages-updated'));
+    }
+
+    return newMessage;
+  },
+  markAsRead: async (conversationId: string): Promise<void> => {
+    const conversations = await messagesApi.getConversations();
+    const convIndex = conversations.findIndex((c) => c.id === conversationId);
+    if (convIndex !== -1 && conversations[convIndex].unreadCount > 0) {
+      conversations[convIndex] = {
+        ...conversations[convIndex],
+        unreadCount: 0,
+      };
+      writeStorage(CONVERSATIONS_STORAGE_KEY, conversations);
+    }
+
+    // Mark thread messages read
+    const thread = await messagesApi.getMessages(conversationId);
+    let changed = false;
+    const updatedThread = thread.map((m) => {
+      if (!m.read) {
+        changed = true;
+        return { ...m, read: true };
+      }
+      return m;
+    });
+    if (changed) {
+      writeStorage(`${MESSAGES_STORAGE_PREFIX}${conversationId}`, updatedThread);
+    }
+
+    if (isBrowser) {
+      window.dispatchEvent(new CustomEvent('hamplard:messages-updated'));
+    }
+  },
+  getUnreadCount: async (): Promise<number> => {
+    const conversations = await messagesApi.getConversations();
+    return conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
+  },
+};
+

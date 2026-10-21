@@ -414,6 +414,7 @@ export function LearnSidebar({
                 </ul>
               )}
             </div>
+          );
         })}
         {filteredModules.length === 0 && (
           <div className="px-4 py-8 text-center text-sm text-ink-500">
