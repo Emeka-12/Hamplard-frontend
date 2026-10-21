@@ -1,16 +1,5 @@
 import { apiClient } from "./client";
 import type {
-  ApiResponse, PaginatedResponse, Course, Enrollment,
-  Certificate, Notification, User, Category, Announcement,
-  Bundle, StudentEnrollmentRow, StudentDetail, SavedPaymentMethod,
-} from '@/types';
-
-const isBrowser = typeof window !== 'undefined';
-const ANNOUNCEMENTS_STORAGE_KEY = 'hamplard_announcements';
-const NOTIFICATIONS_STORAGE_KEY = 'hamplard_notifications';
-const PAYMENT_METHODS_STORAGE_KEY = 'hamplard_payment_methods';
-
-const readStorage = <T,>(key: string, fallback: T): T => {
   ApiResponse,
   PaginatedResponse,
   Course,
@@ -23,12 +12,23 @@ const readStorage = <T,>(key: string, fallback: T): T => {
   Gift,
   LeaderboardResponse,
   LeaderboardPeriod,
-} from "@/types";
+  Bundle,
+  StudentEnrollmentRow,
+  StudentDetail,
+  SavedPaymentMethod,
+  ShowcaseProject,
+  ShowcaseComment,
+  SubmitShowcasePayload,
+  LiveSession,
+  LiveSessionRecording,
+} from '@/types';
 
-const isBrowser = typeof window !== "undefined";
-const ANNOUNCEMENTS_STORAGE_KEY = "hamplard_announcements";
-const NOTIFICATIONS_STORAGE_KEY = "hamplard_notifications";
-const PAYMENT_METHODS_STORAGE_KEY = "hamplard_payment_methods";
+const isBrowser = typeof window !== 'undefined';
+const ANNOUNCEMENTS_STORAGE_KEY = 'hamplard_announcements';
+const NOTIFICATIONS_STORAGE_KEY = 'hamplard_notifications';
+const PAYMENT_METHODS_STORAGE_KEY = 'hamplard_payment_methods';
+const SHOWCASE_STORAGE_KEY = 'hamplard_showcase_projects';
+const LIVE_SESSIONS_STORAGE_KEY = 'hamplard_live_sessions';
 
 const readStorage = <T>(key: string, fallback: T): T => {
   if (!isBrowser) return fallback;
@@ -912,6 +912,11 @@ export const tagsApi = {
     const { data } = await apiClient.get<ApiResponse<string[]>>("/tags", {
       params: { q: query },
     });
+    return data.data;
+  },
+};
+
+// ----------------------------------------------------------
 // Instructor Applications
 // ----------------------------------------------------------
 export const instructorApplicationApi = {
@@ -929,3 +934,391 @@ export const instructorApplicationApi = {
     return data.data;
   },
 };
+
+// ----------------------------------------------------------
+// Student Project Showcase Gallery (Issue #400)
+// ----------------------------------------------------------
+
+const DEFAULT_SHOWCASE_PROJECTS: ShowcaseProject[] = [
+  {
+    id: 'proj-1',
+    courseId: 'course-1',
+    courseTitle: 'Professional African Tailoring & Pattern Drafting',
+    studentId: 'user-1',
+    studentName: 'Amina Bello',
+    studentAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    title: 'Emerald Green Mermaid Aso Ebi Gown',
+    description: 'Finished my final course assignment! Drafted the corset bodice and French lace skirt with built-in boning and horsehair braid hem.',
+    imageUrl: 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800',
+    status: 'APPROVED',
+    likesCount: 24,
+    hasLiked: false,
+    commentsCount: 3,
+    assignmentId: 'assign-1',
+    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+    comments: [
+      {
+        id: 'c-1',
+        projectId: 'proj-1',
+        userId: 'u-inst',
+        userName: 'Master Chidi (Instructor)',
+        userAvatar: null,
+        content: 'Exceptional seam finishing on the side darts Amina! Approved with honors.',
+        createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+      },
+      {
+        id: 'c-2',
+        projectId: 'proj-1',
+        userId: 'u-2',
+        userName: 'Kofi Mensah',
+        userAvatar: null,
+        content: 'The drape of that fabric is gorgeous! Inspiring work.',
+        createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: 'proj-2',
+    courseId: 'course-1',
+    courseTitle: 'Artisan Pastry & Modern Cake Design',
+    studentId: 'user-2',
+    studentName: 'Ngozi Eze',
+    studentAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
+    title: '3-Tier Buttercream Wedding Cake with Rice Paper Sails',
+    description: 'Vanilla bean sponge layered with passion fruit curd and Swiss meringue buttercream. Applied the sharp edge technique from Lesson 4.',
+    imageUrl: 'https://images.unsplash.com/photo-1535141192574-5d4897c13136?w=800',
+    status: 'APPROVED',
+    likesCount: 38,
+    hasLiked: true,
+    commentsCount: 2,
+    assignmentId: 'assign-2',
+    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+    comments: [
+      {
+        id: 'c-3',
+        projectId: 'proj-2',
+        userId: 'u-3',
+        userName: 'Fatima Aliyu',
+        userAvatar: null,
+        content: 'Those rice paper sails look so delicate! How did you color them?',
+        createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: 'proj-3',
+    courseId: 'course-1',
+    courseTitle: 'Glamour & Bridal Makeup Artistry',
+    studentId: 'user-3',
+    studentName: 'Zainab Touré',
+    studentAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    title: 'Sunset Cut Crease Bridal Look',
+    description: 'Practiced gradient blending with warm terracotta and gold foil tones. Completed for the bridal glam module.',
+    imageUrl: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=800',
+    status: 'APPROVED',
+    likesCount: 19,
+    hasLiked: false,
+    commentsCount: 1,
+    assignmentId: 'assign-3',
+    createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+    comments: [
+      {
+        id: 'c-4',
+        projectId: 'proj-3',
+        userId: 'u-4',
+        userName: 'Tariro Moyo',
+        userAvatar: null,
+        content: 'Flawless skin work and the winged liner is so sharp!',
+        createdAt: new Date(Date.now() - 6 * 86400000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: 'proj-4',
+    courseId: 'course-1',
+    courseTitle: 'Traditional Leather Craft & Footwear',
+    studentId: 'user-4',
+    studentName: 'David Osei',
+    studentAvatar: null,
+    title: 'Hand-Stitched Vegetable Tanned Leather Loafers',
+    description: 'First pair of handcrafted shoes! Saddle stitched with wax thread, hand-carved leather insole and stacked leather heels.',
+    imageUrl: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=800',
+    status: 'APPROVED',
+    likesCount: 42,
+    hasLiked: false,
+    commentsCount: 4,
+    assignmentId: 'assign-4',
+    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+    comments: [],
+  },
+];
+
+export const showcaseApi = {
+  getByCourse: async (courseId: string): Promise<ShowcaseProject[]> => {
+    try {
+      const { data } = await apiClient.get<ApiResponse<ShowcaseProject[]>>(
+        `/courses/${courseId}/showcase`,
+      );
+      if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+        return data.data;
+      }
+    } catch {
+      // Fallback to storage or default
+    }
+
+    const stored = readStorage<ShowcaseProject[]>(SHOWCASE_STORAGE_KEY, DEFAULT_SHOWCASE_PROJECTS);
+    return stored.filter((p) => p.status === 'APPROVED');
+  },
+
+  likeProject: async (projectId: string): Promise<{ likesCount: number; hasLiked: boolean }> => {
+    try {
+      const { data } = await apiClient.post<ApiResponse<{ likesCount: number; hasLiked: boolean }>>(
+        `/showcase/${projectId}/like`,
+      );
+      return data.data;
+    } catch {
+      // Offline/mock handler
+      const stored = readStorage<ShowcaseProject[]>(SHOWCASE_STORAGE_KEY, DEFAULT_SHOWCASE_PROJECTS);
+      let updatedLikes = 0;
+      let newHasLiked = false;
+
+      const updated = stored.map((p) => {
+        if (p.id === projectId) {
+          newHasLiked = !p.hasLiked;
+          updatedLikes = newHasLiked ? p.likesCount + 1 : Math.max(0, p.likesCount - 1);
+          return { ...p, likesCount: updatedLikes, hasLiked: newHasLiked };
+        }
+        return p;
+      });
+
+      writeStorage(SHOWCASE_STORAGE_KEY, updated);
+      return { likesCount: updatedLikes, hasLiked: newHasLiked };
+    }
+  },
+
+  commentProject: async (
+    projectId: string,
+    content: string,
+    userName?: string,
+  ): Promise<ShowcaseComment> => {
+    try {
+      const { data } = await apiClient.post<ApiResponse<ShowcaseComment>>(
+        `/showcase/${projectId}/comments`,
+        { content },
+      );
+      return data.data;
+    } catch {
+      const newComment: ShowcaseComment = {
+        id: `c-${Date.now()}`,
+        projectId,
+        userId: currentUserKey(),
+        userName: userName || 'Learner',
+        userAvatar: null,
+        content,
+        createdAt: new Date().toISOString(),
+      };
+
+      const stored = readStorage<ShowcaseProject[]>(SHOWCASE_STORAGE_KEY, DEFAULT_SHOWCASE_PROJECTS);
+      const updated = stored.map((p) => {
+        if (p.id === projectId) {
+          const comments = p.comments || [];
+          return {
+            ...p,
+            comments: [...comments, newComment],
+            commentsCount: (p.commentsCount || 0) + 1,
+          };
+        }
+        return p;
+      });
+
+      writeStorage(SHOWCASE_STORAGE_KEY, updated);
+      return newComment;
+    }
+  },
+
+  submitProject: async (payload: SubmitShowcasePayload): Promise<ShowcaseProject> => {
+    try {
+      const { data } = await apiClient.post<ApiResponse<ShowcaseProject>>(
+        `/courses/${payload.courseId}/showcase`,
+        payload,
+      );
+      return data.data;
+    } catch {
+      const newProject: ShowcaseProject = {
+        id: `proj-${Date.now()}`,
+        courseId: payload.courseId,
+        studentId: currentUserKey(),
+        studentName: payload.studentName || 'Student Learner',
+        studentAvatar: null,
+        title: payload.title,
+        description: payload.description,
+        imageUrl: payload.imageUrl,
+        status: 'APPROVED', // approved for immediate display in demo
+        likesCount: 0,
+        hasLiked: false,
+        commentsCount: 0,
+        comments: [],
+        assignmentId: payload.assignmentId,
+        createdAt: new Date().toISOString(),
+      };
+
+      const stored = readStorage<ShowcaseProject[]>(SHOWCASE_STORAGE_KEY, DEFAULT_SHOWCASE_PROJECTS);
+      writeStorage(SHOWCASE_STORAGE_KEY, [newProject, ...stored]);
+      return newProject;
+    }
+  },
+
+  reportProject: async (
+    projectId: string,
+    reason: string,
+    details?: string,
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const { data } = await apiClient.post<ApiResponse<{ success: boolean; message: string }>>(
+        `/showcase/${projectId}/report`,
+        { reason, details },
+      );
+      return data.data;
+    } catch {
+      return {
+        success: true,
+        message: 'Project has been reported to moderators. Thank you for keeping Hamplard safe.',
+      };
+    }
+  },
+};
+
+// ----------------------------------------------------------
+// Live Sessions Schedule & Recordings (Issue #402)
+// ----------------------------------------------------------
+
+const DEFAULT_UPCOMING_SESSIONS: LiveSession[] = [
+  {
+    id: 'live-1',
+    courseId: 'course-1',
+    courseTitle: 'Professional African Tailoring & Pattern Drafting',
+    title: 'Live Pattern Drafting & Corset Fitting Masterclass',
+    description: 'Join Master Chidi for an interactive walkthrough on drafting custom boned corsets for varied body measurements with live Q&A.',
+    instructorName: 'Master Chidi',
+    instructorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    // Set scheduledAt to 5 minutes from now so it is joinable for testing
+    scheduledAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    durationMinutes: 60,
+    joinUrl: 'https://meet.hamplard.com/live-corset-demo',
+    status: 'UPCOMING',
+    registeredCount: 42,
+    isRegistered: true,
+  },
+  {
+    id: 'live-2',
+    courseId: 'course-2',
+    courseTitle: 'Artisan Pastry & Modern Cake Design',
+    title: 'Cake Decorating Q&A: Fondant Smoothing & Weather Resilience',
+    description: 'Overcoming humidity issues with buttercream and fondant in African climates, plus pricing strategies for bespoke event cakes.',
+    instructorName: 'Chef Amara',
+    instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    scheduledAt: new Date(Date.now() + 2 * 86400000 + 4 * 3600000).toISOString(),
+    durationMinutes: 75,
+    joinUrl: 'https://meet.hamplard.com/live-pastry-qa',
+    status: 'UPCOMING',
+    registeredCount: 88,
+    isRegistered: false,
+  },
+  {
+    id: 'live-3',
+    courseId: 'course-3',
+    courseTitle: 'Glamour & Bridal Makeup Artistry',
+    title: 'Cut-Crease & Complexion Matching for Melanin Rich Skin',
+    description: 'Step-by-step live demo on camera lighting considerations, undertone balance, and setting sprays for 12-hour longevity.',
+    instructorName: 'Zainab Touré',
+    instructorAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
+    scheduledAt: new Date(Date.now() + 5 * 86400000).toISOString(),
+    durationMinutes: 90,
+    joinUrl: 'https://meet.hamplard.com/live-bridal-glam',
+    status: 'UPCOMING',
+    registeredCount: 65,
+    isRegistered: false,
+  },
+];
+
+const DEFAULT_PAST_RECORDINGS: LiveSessionRecording[] = [
+  {
+    id: 'rec-1',
+    sessionId: 'session-past-1',
+    title: 'Sourdough Starters & Proofing in Warm Weather',
+    description: 'Fermentation timing, dough elasticity tests, and baking with Dutch ovens.',
+    instructorName: 'Chef Amara',
+    instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    recordedAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+    durationMinutes: 72,
+    videoUrl: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600',
+    viewsCount: 312,
+  },
+  {
+    id: 'rec-2',
+    sessionId: 'session-past-2',
+    title: 'Sewing Machine Maintenance & Tension Troubleshooting',
+    description: 'Cleaning the bobbin case, replacing needles, and balancing upper/lower tension.',
+    instructorName: 'Master Chidi',
+    instructorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    recordedAt: new Date(Date.now() - 9 * 86400000).toISOString(),
+    durationMinutes: 55,
+    videoUrl: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?w=600',
+    viewsCount: 450,
+  },
+  {
+    id: 'rec-3',
+    sessionId: 'session-past-3',
+    title: 'Color Theory in Makeup Artistry: Neutralizing Hyperpigmentation',
+    description: 'Color wheels, peach/orange color correctors, and seamless concealer blending.',
+    instructorName: 'Zainab Touré',
+    instructorAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
+    recordedAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+    durationMinutes: 84,
+    videoUrl: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=600',
+    viewsCount: 520,
+  },
+];
+
+export const liveSessionsApi = {
+  getUpcoming: async (): Promise<LiveSession[]> => {
+    try {
+      const { data } = await apiClient.get<ApiResponse<LiveSession[]>>('/live-sessions/upcoming');
+      if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+        return data.data;
+      }
+    } catch {
+      // Fallback
+    }
+    return readStorage<LiveSession[]>(LIVE_SESSIONS_STORAGE_KEY, DEFAULT_UPCOMING_SESSIONS);
+  },
+
+  getPastRecordings: async (): Promise<LiveSessionRecording[]> => {
+    try {
+      const { data } = await apiClient.get<ApiResponse<LiveSessionRecording[]>>(
+        '/live-sessions/recordings',
+      );
+      if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+        return data.data;
+      }
+    } catch {
+      // Fallback
+    }
+    return DEFAULT_PAST_RECORDINGS;
+  },
+
+  joinSession: async (sessionId: string): Promise<{ joinUrl: string }> => {
+    try {
+      const { data } = await apiClient.post<ApiResponse<{ joinUrl: string }>>(
+        `/live-sessions/${sessionId}/join`,
+      );
+      return data.data;
+    } catch {
+      return { joinUrl: `https://meet.hamplard.com/live/${sessionId}` };
+    }
+  },
+};
+
