@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   CheckCircle2, Circle, ChevronDown, ChevronRight,
   Download, Loader2, ArrowLeft, Award, SkipForward, MessageSquare,
@@ -41,9 +41,10 @@ export default function LearnPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // requestedLessonId reserved for future deep-link support
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _requestedLessonId = searchParams.get("lesson");
+  const pathname = usePathname();
+  const lessonParam = searchParams.get('lesson');
+  // Captured once so the initial load does not re-run on every lesson change
+  const initialLessonRef = useRef<string | null>(lessonParam);
 
   const [course, setCourse] = useState<Course | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
@@ -83,7 +84,10 @@ export default function LearnPage() {
   // selectLesson: named alias for setActiveLesson used in QuizComponent onContinue
   const selectLesson = useCallback((lesson: Lesson) => {
     setActiveLesson(lesson);
-  }, []);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('lesson', lesson.id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [router, pathname, searchParams]);
 
   // ── Persist autoplay preference ──────────────────────────────────────────
   const handleAutoplayChange = useCallback((enabled: boolean) => {
@@ -105,8 +109,8 @@ export default function LearnPage() {
   const goToNext = useCallback(() => {
     if (!nextLesson) return;
     setShowCountdown(false);
-    setActiveLesson(nextLesson);
-  }, [nextLesson]);
+    selectLesson(nextLesson);
+  }, [nextLesson, selectLesson]);
 
   const cancelCountdown = useCallback(() => {
     setShowCountdown(false);
@@ -122,16 +126,20 @@ export default function LearnPage() {
     ]).then(([c, e]) => {
       setCourse(c);
       setEnrollment(e);
-      // Open first module by default
-      if (c.modules?.[0]) setExpanded({ [c.modules[0].id]: true });
-      // Start from first incomplete lesson
       const allLessons = flatLessons(c);
       const completedIds = new Set(
         e.lessonProgress?.filter((p: { completed: boolean }) => p.completed).map((p: { lessonId: string }) => p.lessonId),
       );
-      const first = allLessons.find((l) => !completedIds.has(l.id)) ?? allLessons[0];
-      if (first) setActiveLesson(first);
-    })
+      const requested = initialLessonRef.current
+        ? allLessons.find((l) => l.id === initialLessonRef.current)
+        : undefined;
+      const first = requested ?? allLessons.find((l) => !completedIds.has(l.id)) ?? allLessons[0];
+      if (first) {
+        setActiveLesson(first);
+        const owner = c.modules?.find((m) => m.lessons.some((l) => l.id === first.id));
+        const open = owner ?? c.modules?.[0];
+        if (open) setExpanded({ [open.id]: true });
+      }    })
     .catch((err) => {
       console.error(err);
       const status = (err as { response?: { status?: number }; status?: number })?.response?.status ?? (err as { status?: number })?.status;
@@ -190,6 +198,17 @@ export default function LearnPage() {
     setShowCountdown(false);
     setMarkError(null);
   }, [activeLesson]);
+
+  // Follow ?lesson= changes (back/forward, manual URL edits)
+  useEffect(() => {
+    if (!course || !lessonParam || activeLesson?.id === lessonParam) return;
+    const match = flatLessons(course).find((l) => l.id === lessonParam);
+    if (!match) return;
+    setActiveLesson(match);
+    const owner = course.modules?.find((m) => m.lessons.some((l) => l.id === match.id));
+    if (owner) setExpanded((p) => ({ ...p, [owner.id]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonParam, course]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const isLessonCompleted = (lessonId: string) =>
@@ -345,7 +364,7 @@ export default function LearnPage() {
                       return (
                         <button
                           key={lesson.id}
-                          onClick={() => setActiveLesson(lesson)}
+                          onClick={() => selectLesson(lesson)}
                           className={cn(
                             'w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors',
                             active ? 'bg-saffron-50' : 'hover:bg-ink-50',
