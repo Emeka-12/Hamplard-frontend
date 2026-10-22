@@ -429,3 +429,77 @@ export interface StudentDetail {
     lessonProgress: LessonProgressDetail[];
   }>;
 }
+
+// ── Student Project Showcase Gallery (Issue #400) ──────────────────────────
+
+export interface ShowcaseComment {
+  id: string;
+  projectId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string | null;
+  content: string;
+  createdAt: string;
+}
+
+export interface ShowcaseProject {
+  id: string;
+  courseId: string;
+  courseTitle?: string;
+  studentId: string;
+  studentName: string;
+  studentAvatar?: string | null;
+  title: string;
+  description: string;
+  imageUrl: string;
+  additionalImages?: string[];
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  likesCount: number;
+  hasLiked?: boolean;
+  commentsCount: number;
+  comments?: ShowcaseComment[];
+  assignmentId?: string;
+  createdAt: string;
+}
+
+export interface SubmitShowcasePayload {
+  courseId: string;
+  assignmentId?: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  studentName?: string;
+}
+
+// ── Live Sessions (Issue #402) ─────────────────────────────────────────────
+
+export interface LiveSession {
+  id: string;
+  courseId?: string;
+  courseTitle?: string;
+  title: string;
+  description: string;
+  instructorName: string;
+  instructorAvatar?: string | null;
+  scheduledAt: string; // ISO 8601 string
+  durationMinutes: number;
+  joinUrl?: string;
+  status: 'UPCOMING' | 'LIVE' | 'COMPLETED' | 'CANCELLED';
+  registeredCount?: number;
+  isRegistered?: boolean;
+}
+
+export interface LiveSessionRecording {
+  id: string;
+  sessionId: string;
+  title: string;
+  description: string;
+  instructorName: string;
+  instructorAvatar?: string | null;
+  recordedAt: string;
+  durationMinutes: number;
+  videoUrl: string;
+  thumbnailUrl?: string | null;
+  viewsCount?: number;
+}
+
