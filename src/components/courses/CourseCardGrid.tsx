@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CourseCard } from './CourseCard';
+import { CourseCardSkeleton } from '@/components/skeletons/CourseCardSkeleton';
 import { CourseCardSkeleton } from '@/components/skeletons';
 import type { Course } from '@/types';
 

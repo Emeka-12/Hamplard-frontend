@@ -17,6 +17,8 @@ import {
   ClipboardCheck,
   ChevronLeft,
   ChevronRight,
+  Star,
+  MessageCircle,
   MessageSquare,
   Medal,
   type LucideIcon,
@@ -57,6 +59,8 @@ const INSTRUCTOR_NAV: NavItem[] = [
   { href: '/dashboard/courses/create', label: 'New Course', icon: Video },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare, showMessagesBadge: true },
   { href: '/dashboard/instructor/assignments', label: 'Assignments', icon: ClipboardCheck },
+  { href: '/dashboard/instructor/reviews', label: 'Reviews', icon: Star },
+  { href: '/dashboard/instructor/qa', label: 'Q&A Inbox', icon: MessageCircle },
   { href: '/dashboard/instructor/announcements', label: 'Announcements', icon: Bell },
   { href: '/notifications', label: 'Notifications', icon: Bell },
 ];

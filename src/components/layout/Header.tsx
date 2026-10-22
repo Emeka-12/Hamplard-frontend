@@ -535,7 +535,7 @@ export function Header() {
 
               {/* Cart */}
               <Link
-                href="/dashboard/courses"
+                href="/cart"
                 className="relative rounded-lg p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
                 aria-label={
                   cartCount === 1
@@ -874,7 +874,7 @@ export function Header() {
                 Dashboard
               </Link>
               <Link
-                href="/dashboard/courses"
+                href="/cart"
                 onClick={() => setMobileOpen(false)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors hover:bg-white/10"
               >

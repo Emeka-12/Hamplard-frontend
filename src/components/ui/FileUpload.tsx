@@ -313,6 +313,7 @@ export function FileUpload({
         startUpload(it);
       });
     },
+    [multiple, maxFiles, accept, maxSizeBytes, onUploadError, onUploadStart, startUpload, getVideoDuration],
     [multiple, maxFiles, items.length, accept, maxSizeBytes, onUploadError, onUploadStart, startUpload, getVideoDuration]
   );
 
@@ -351,6 +352,7 @@ export function FileUpload({
   function handleRetry(item: UploadItem) {
     updateItem(item.id, { status: 'uploading', progress: 0, errorMessage: undefined });
     onUploadStart?.();
+    startUpload({ ...item, status: 'uploading', progress: 0 });
     startUpload({ ...item, status: 'uploading', progress: 0, errorMessage: undefined });
   }
 
@@ -371,12 +373,6 @@ export function FileUpload({
     e.preventDefault();
     setDragActive(false);
     if (e.dataTransfer.files?.length) void addFiles(e.dataTransfer.files);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    // Ignore dragleave fired when the pointer moves onto a child element
-    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
-    setDragActive(false);
   };
 
   const uploadedCount = items.filter((it) => it.status === 'success').length;
