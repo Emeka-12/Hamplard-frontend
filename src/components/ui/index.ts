@@ -33,3 +33,5 @@ export { MenuDivider } from './Menu';
 export { MenuSub } from './Menu';
 export { MenuSubTrigger } from './Menu';
 export { MenuSubContent } from './Menu';
+export { Lightbox, StepImageGallery } from './Lightbox';
+export type { LightboxImage, LightboxProps } from './Lightbox';

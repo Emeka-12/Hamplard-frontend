@@ -39,6 +39,7 @@ interface NavItem {
 
 const STUDENT_NAV: NavItem[] = [
   { href: '/dashboard/my-courses', label: 'My Courses', icon: BookOpen },
+  { href: '/dashboard/live', label: 'Live Sessions', icon: Video },
   { href: '/dashboard/progress', label: 'Progress', icon: BarChart2 },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare, showMessagesBadge: true },
   { href: '/dashboard/achievements', label: 'Achievements', icon: Medal },
