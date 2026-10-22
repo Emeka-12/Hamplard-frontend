@@ -1,407 +1,598 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
   ChevronDown,
   ChevronUp,
-  GripVertical,
-  Plus,
-  Pencil,
-  Trash2,
-  Check,
-  X,
-  Video,
-  FileText,
-  HelpCircle,
   ClipboardList,
+  FileText,
+  GripVertical,
+  HelpCircle,
+  Pencil,
+  Plus,
+  Trash2,
+  Video,
+  X,
 } from 'lucide-react';
-import { lessonsApi } from '@/lib/api/services';
+import { curriculumApi } from '@/lib/api/services';
 import { useToastContext } from '@/components/ui/ToastProvider';
 import { cn } from '@/lib/utils';
-import type { CourseModule, Lesson } from '@/types';
+import type { CourseModule, Lesson, LessonType } from '@/types';
 
-// ── types ─────────────────────────────────────────────────────────────────
+// ── constants ──────────────────────────────────────────────────────────────
 
-type LessonType = 'VIDEO' | 'TEXT' | 'QUIZ' | 'ASSIGNMENT';
-
-const LESSON_TYPE_META: Record<LessonType, { label: string; Icon: React.ElementType }> = {
-  VIDEO: { label: 'Video', Icon: Video },
-  TEXT: { label: 'Text', Icon: FileText },
-  QUIZ: { label: 'Quiz', Icon: HelpCircle },
-  ASSIGNMENT: { label: 'Assignment', Icon: ClipboardList },
+const LESSON_TYPE_META: Record<
+  LessonType,
+  { label: string; Icon: typeof Video; badge: string }
+> = {
+  VIDEO: { label: 'Video', Icon: Video, badge: 'bg-saffron-50 text-saffron-700' },
+  TEXT: { label: 'Text', Icon: FileText, badge: 'bg-hamplard-lilac text-hamplard-mid' },
+  QUIZ: { label: 'Quiz', Icon: HelpCircle, badge: 'bg-leaf-50 text-leaf-700' },
+  ASSIGNMENT: {
+    label: 'Assignment',
+    Icon: ClipboardList,
+    badge: 'bg-ink-100 text-ink-700',
+  },
 };
 
-export interface CurriculumBuilderProps {
-  courseId: string;
-  modules: CourseModule[];
+const LESSON_TYPES = Object.keys(LESSON_TYPE_META) as LessonType[];
+
+/** How long to wait after the last edit before persisting the structure. */
+const AUTOSAVE_DELAY_MS = 900;
+
+const INSTRUCTIONS_ID = 'curriculum-builder-instructions';
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+/** Moves an item inside an array and returns a new array. */
+function moveItem<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
+    return items;
+  }
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
 }
 
-// ── tiny inline-rename input ──────────────────────────────────────────────
+/** Re-numbers modules and lessons so `position` matches the visible order. */
+function withPositions(modules: CourseModule[]): CourseModule[] {
+  return modules.map((module, moduleIndex) => ({
+    ...module,
+    position: moduleIndex,
+    lessons: module.lessons.map((lesson, lessonIndex) => ({
+      ...lesson,
+      position: lessonIndex,
+    })),
+  }));
+}
 
-function InlineRename({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial: string;
+// ── inline rename field ────────────────────────────────────────────────────
+
+interface InlineRenameProps {
+  label: string;
+  initialValue: string;
   onSave: (value: string) => void;
   onCancel: () => void;
-}) {
-  const [value, setValue] = useState(initial);
-  const ref = useRef<HTMLInputElement>(null);
+}
+
+function InlineRename({ label, initialValue, onSave, onCancel }: InlineRenameProps) {
+  const [value, setValue] = useState(initialValue);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    ref.current?.select();
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, []);
 
   return (
     <form
-      className="flex items-center gap-1 flex-1"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (value.trim()) onSave(value.trim());
+      className="flex min-w-0 flex-1 items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const trimmed = value.trim();
+        if (trimmed) onSave(trimmed);
       }}
     >
       <input
-        ref={ref}
+        ref={inputRef}
+        type="text"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="flex-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        aria-label="Rename"
+        aria-label={label}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            onCancel();
+          }
+        }}
+        className="input min-w-0 flex-1 py-1.5 text-sm"
       />
-      <button type="submit" aria-label="Confirm rename" className="p-1 text-green-600 hover:text-green-700">
-        <Check className="w-4 h-4" aria-hidden />
+      <button type="submit" className="btn-primary px-3 py-1.5 text-xs" aria-label="Save name">
+        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        Save
       </button>
-      <button type="button" onClick={onCancel} aria-label="Cancel rename" className="p-1 text-gray-400 hover:text-gray-600">
-        <X className="w-4 h-4" aria-hidden />
+      <button
+        type="button"
+        className="btn-ghost px-3 py-1.5 text-xs"
+        onClick={onCancel}
+        aria-label="Cancel rename"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+        Cancel
       </button>
     </form>
   );
 }
 
-// ── lesson row ────────────────────────────────────────────────────────────
+// ── delete confirmation ────────────────────────────────────────────────────
+
+interface ConfirmDeleteProps {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmDelete({ message, onConfirm, onCancel }: ConfirmDeleteProps) {
+  const confirmRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    confirmRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      role="group"
+      aria-label="Confirm deletion"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2"
+    >
+      <span className="text-xs font-medium text-rose-800">{message}</span>
+      <button
+        ref={confirmRef}
+        type="button"
+        onClick={onConfirm}
+        className="btn-danger px-3 py-1.5 text-xs"
+      >
+        Delete
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="btn-secondary px-3 py-1.5 text-xs"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+// ── lesson row ─────────────────────────────────────────────────────────────
+
+interface LessonRowProps {
+  lesson: Lesson;
+  index: number;
+  total: number;
+  isRenaming: boolean;
+  isConfirmingDelete: boolean;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onRename: (title: string) => void;
+  onStartDelete: () => void;
+  onCancelDelete: () => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}
 
 function LessonRow({
   lesson,
-  isFirst,
-  isLast,
+  index,
+  total,
+  isRenaming,
+  isConfirmingDelete,
+  onStartRename,
+  onCancelRename,
+  onRename,
+  onStartDelete,
+  onCancelDelete,
+  onDelete,
   onMoveUp,
   onMoveDown,
-  onRename,
-  onDelete,
-  dragProps,
-}: {
-  lesson: Lesson;
-  isFirst: boolean;
-  isLast: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onRename: (title: string) => void;
-  onDelete: () => void;
-  dragProps: React.HTMLAttributes<HTMLLIElement>;
-}) {
-  const [renaming, setRenaming] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const meta = LESSON_TYPE_META[lesson.type as LessonType] ?? LESSON_TYPE_META.VIDEO;
+}: LessonRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: lesson.id,
+    data: { type: 'lesson', moduleId: lesson.moduleId },
+  });
+
+  const meta = LESSON_TYPE_META[lesson.type] ?? LESSON_TYPE_META.VIDEO;
   const { Icon } = meta;
 
   return (
     <li
-      {...dragProps}
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 group',
-        dragProps.className,
+        'rounded-xl border border-ink-100 bg-white px-3 py-2.5',
+        isDragging && 'z-10 opacity-60 shadow-lifted',
       )}
     >
-      <span
-        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500"
-        aria-hidden
-      >
-        <GripVertical className="w-4 h-4" />
-      </span>
-
-      <Icon className="w-4 h-4 flex-shrink-0 text-gray-400" aria-hidden />
-
-      {renaming ? (
-        <InlineRename
-          initial={lesson.title}
-          onSave={(t) => { onRename(t); setRenaming(false); }}
-          onCancel={() => setRenaming(false)}
-        />
-      ) : (
-        <span className="flex-1 text-sm text-gray-700 dark:text-gray-200 truncate">{lesson.title}</span>
-      )}
-
-      <span className="hidden sm:inline text-xs text-gray-400 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700">
-        {meta.label}
-      </span>
-
-      {/* keyboard move */}
-      <div className="flex flex-col opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <div className="flex items-center gap-2">
         <button
           type="button"
-          disabled={isFirst}
-          onClick={onMoveUp}
-          aria-label="Move lesson up"
-          className="disabled:opacity-30 text-gray-400 hover:text-gray-600"
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder lesson ${lesson.title}`}
+          aria-describedby={INSTRUCTIONS_ID}
+          className="cursor-grab touch-none rounded-lg p-1 text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hamplard-primary active:cursor-grabbing"
         >
-          <ChevronUp className="w-3 h-3" aria-hidden />
+          <GripVertical className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button
-          type="button"
-          disabled={isLast}
-          onClick={onMoveDown}
-          aria-label="Move lesson down"
-          className="disabled:opacity-30 text-gray-400 hover:text-gray-600"
-        >
-          <ChevronDown className="w-3 h-3" aria-hidden />
-        </button>
+
+        <span className={cn('badge', meta.badge)}>
+          <Icon className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          {meta.label}
+        </span>
+
+        {isRenaming ? (
+          <InlineRename
+            label={`Rename lesson ${lesson.title}`}
+            initialValue={lesson.title}
+            onSave={(title) => {
+              onRename(title);
+              onCancelRename();
+            }}
+            onCancel={onCancelRename}
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-hamplard-deep">
+            {lesson.title}
+          </span>
+        )}
+
+        {!isRenaming && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={index === 0}
+              aria-label={`Move lesson ${lesson.title} up`}
+              className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={index === total - 1}
+              aria-label={`Move lesson ${lesson.title} down`}
+              className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={onStartRename}
+              aria-label={`Rename lesson ${lesson.title}`}
+              className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={onStartDelete}
+              aria-label={`Delete lesson ${lesson.title}`}
+              className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {!renaming && !confirming && (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-          <button
-            type="button"
-            onClick={() => setRenaming(true)}
-            aria-label={`Rename lesson ${lesson.title}`}
-            className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
-          >
-            <Pencil className="w-3.5 h-3.5" aria-hidden />
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            aria-label={`Delete lesson ${lesson.title}`}
-            className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-          >
-            <Trash2 className="w-3.5 h-3.5" aria-hidden />
-          </button>
-        </div>
-      )}
-
-      {confirming && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-red-600 dark:text-red-400">Delete?</span>
-          <button
-            type="button"
-            onClick={() => { onDelete(); setConfirming(false); }}
-            className="font-medium text-red-600 hover:text-red-700"
-          >
-            Yes
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirming(false)}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            No
-          </button>
+      {isConfirmingDelete && (
+        <div className="mt-2">
+          <ConfirmDelete
+            message={`Delete “${lesson.title}”?`}
+            onConfirm={onDelete}
+            onCancel={onCancelDelete}
+          />
         </div>
       )}
     </li>
   );
 }
 
-// ── module card ───────────────────────────────────────────────────────────
+// ── module card ────────────────────────────────────────────────────────────
+
+interface ModuleCardProps {
+  module: CourseModule;
+  index: number;
+  total: number;
+  renamingLessonId: string | null;
+  confirmingLessonId: string | null;
+  onRenameModule: (title: string) => void;
+  onDeleteModule: () => void;
+  onMoveModuleUp: () => void;
+  onMoveModuleDown: () => void;
+  onAddLesson: (type: LessonType) => void;
+  onRenameLesson: (lessonId: string, title: string) => void;
+  onDeleteLesson: (lessonId: string) => void;
+  onMoveLessonUp: (lessonId: string) => void;
+  onMoveLessonDown: (lessonId: string) => void;
+  onStartRenameLesson: (lessonId: string) => void;
+  onCancelRenameLesson: () => void;
+  onStartDeleteLesson: (lessonId: string) => void;
+  onCancelDeleteLesson: () => void;
+}
 
 function ModuleCard({
   module,
-  isFirst,
-  isLast,
-  onMoveUp,
-  onMoveDown,
+  index,
+  total,
+  renamingLessonId,
+  confirmingLessonId,
   onRenameModule,
   onDeleteModule,
+  onMoveModuleUp,
+  onMoveModuleDown,
   onAddLesson,
-  onMoveLessonUp,
-  onMoveLessonDown,
   onRenameLesson,
   onDeleteLesson,
-}: {
-  module: CourseModule;
-  isFirst: boolean;
-  isLast: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onRenameModule: (title: string) => void;
-  onDeleteModule: () => void;
-  onAddLesson: (type: LessonType) => void;
-  onMoveLessonUp: (index: number) => void;
-  onMoveLessonDown: (index: number) => void;
-  onRenameLesson: (index: number, title: string) => void;
-  onDeleteLesson: (index: number) => void;
-}) {
-  const [open, setOpen] = useState(true);
-  const [renamingModule, setRenamingModule] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [showLessonMenu, setShowLessonMenu] = useState(false);
+  onMoveLessonUp,
+  onMoveLessonDown,
+  onStartRenameLesson,
+  onCancelRenameLesson,
+  onStartDeleteLesson,
+  onCancelDeleteLesson,
+}: ModuleCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: module.id, data: { type: 'module' } });
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [showTypeMenu, setShowTypeMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // drag-over state for lessons
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const dragSrcIndex = useRef<number | null>(null);
-
   useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowLessonMenu(false);
+    if (!showTypeMenu) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowTypeMenu(false);
       }
     }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setShowTypeMenu(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showTypeMenu]);
+
+  const lessonIds = useMemo(
+    () => module.lessons.map((lesson) => lesson.id),
+    [module.lessons],
+  );
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
-      {/* module header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-        <span className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0" aria-hidden>
-          <GripVertical className="w-4 h-4" />
-        </span>
+    <section
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      aria-label={`Module ${index + 1}: ${module.title}`}
+      className={cn(
+        'rounded-2xl border border-ink-100 bg-ink-50/60',
+        isDragging && 'z-10 opacity-60 shadow-lifted',
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2 border-b border-ink-100 px-4 py-3">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder module ${module.title}`}
+          aria-describedby={INSTRUCTIONS_ID}
+          className="cursor-grab touch-none rounded-lg p-1 text-ink-400 transition-colors hover:bg-white hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hamplard-primary active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" aria-hidden="true" />
+        </button>
 
-        {renamingModule ? (
+        {isRenaming ? (
           <InlineRename
-            initial={module.title}
-            onSave={(t) => { onRenameModule(t); setRenamingModule(false); }}
-            onCancel={() => setRenamingModule(false)}
+            label={`Rename module ${module.title}`}
+            initialValue={module.title}
+            onSave={(title) => {
+              onRenameModule(title);
+              setIsRenaming(false);
+            }}
+            onCancel={() => setIsRenaming(false)}
           />
         ) : (
           <>
             <button
               type="button"
-              onClick={() => setOpen((o) => !o)}
-              className="flex-1 flex items-center gap-2 text-left text-sm font-semibold text-gray-800 dark:text-gray-100"
-              aria-expanded={open}
+              onClick={() => setIsExpanded((open) => !open)}
+              aria-expanded={isExpanded}
+              aria-controls={`lessons-${module.id}`}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
             >
-              {open ? <ChevronDown className="w-4 h-4 flex-shrink-0" aria-hidden /> : <ChevronUp className="w-4 h-4 flex-shrink-0" aria-hidden />}
-              {module.title}
-              <span className="ml-1 text-xs font-normal text-gray-400">
-                {module.lessons.length} lesson{module.lessons.length !== 1 ? 's' : ''}
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-hamplard-lilac text-xs font-bold text-hamplard-mid">
+                {index + 1}
               </span>
+              <span className="min-w-0 truncate text-sm font-semibold text-hamplard-deep">
+                {module.title}
+              </span>
+              <span className="shrink-0 text-xs font-normal text-ink-500">
+                {module.lessons.length} lesson{module.lessons.length === 1 ? '' : 's'}
+              </span>
+              {isExpanded ? (
+                <ChevronUp className="h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+              ) : (
+                <ChevronDown className="h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+              )}
             </button>
 
-            {/* module keyboard reorder */}
-            <div className="flex flex-col">
+            <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
-                disabled={isFirst}
-                onClick={onMoveUp}
-                aria-label="Move module up"
-                className="disabled:opacity-30 text-gray-400 hover:text-gray-600"
+                onClick={onMoveModuleUp}
+                disabled={index === 0}
+                aria-label={`Move module ${module.title} up`}
+                className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-white hover:text-ink-700 disabled:cursor-not-allowed disabled:opacity-30"
               >
-                <ChevronUp className="w-3 h-3" aria-hidden />
+                <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
               <button
                 type="button"
-                disabled={isLast}
-                onClick={onMoveDown}
-                aria-label="Move module down"
-                className="disabled:opacity-30 text-gray-400 hover:text-gray-600"
+                onClick={onMoveModuleDown}
+                disabled={index === total - 1}
+                aria-label={`Move module ${module.title} down`}
+                className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-white hover:text-ink-700 disabled:cursor-not-allowed disabled:opacity-30"
               >
-                <ChevronDown className="w-3 h-3" aria-hidden />
+                <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRenaming(true)}
+                aria-label={`Rename module ${module.title}`}
+                className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-white hover:text-ink-700"
+              >
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(true)}
+                aria-label={`Delete module ${module.title}`}
+                className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setRenamingModule(true)}
-              aria-label={`Rename module ${module.title}`}
-              className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              <Pencil className="w-3.5 h-3.5" aria-hidden />
-            </button>
-
-            {confirmingDelete ? (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-red-600">Delete module?</span>
-                <button type="button" onClick={onDeleteModule} className="font-medium text-red-600 hover:text-red-700">Yes</button>
-                <button type="button" onClick={() => setConfirmingDelete(false)} className="text-gray-500">No</button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(true)}
-                aria-label={`Delete module ${module.title}`}
-                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-              >
-                <Trash2 className="w-3.5 h-3.5" aria-hidden />
-              </button>
-            )}
           </>
         )}
       </div>
 
-      {/* lessons */}
-      {open && (
-        <div className="px-4 py-3 space-y-2">
-          <ul className="space-y-1.5">
-            {module.lessons.map((lesson, index) => (
-              <LessonRow
-                key={lesson.id}
-                lesson={lesson}
-                isFirst={index === 0}
-                isLast={index === module.lessons.length - 1}
-                onMoveUp={() => onMoveLessonUp(index)}
-                onMoveDown={() => onMoveLessonDown(index)}
-                onRename={(t) => onRenameLesson(index, t)}
-                onDelete={() => onDeleteLesson(index)}
-                dragProps={{
-                  draggable: true,
-                  onDragStart: () => { dragSrcIndex.current = index; },
-                  onDragOver: (e: React.DragEvent) => {
-                    e.preventDefault();
-                    setDragOverIndex(index);
-                  },
-                  onDragLeave: () => setDragOverIndex(null),
-                  onDrop: () => {
-                    if (dragSrcIndex.current !== null && dragSrcIndex.current !== index) {
-                      const from = dragSrcIndex.current;
-                      // swap via move-up/down sequence handled by parent
-                      const diff = index - from;
-                      for (let i = 0; i < Math.abs(diff); i++) {
-                        if (diff > 0) onMoveLessonDown(from + i);
-                        else onMoveLessonUp(from - i);
-                      }
-                    }
-                    dragSrcIndex.current = null;
-                    setDragOverIndex(null);
-                  },
-                  onDragEnd: () => { dragSrcIndex.current = null; setDragOverIndex(null); },
-                  className: cn(dragOverIndex === index && 'ring-2 ring-primary ring-offset-1'),
-                }}
-              />
-            ))}
-          </ul>
+      {isConfirmingDelete && !isRenaming && (
+        <div className="px-4 pt-3">
+          <ConfirmDelete
+            message={`Delete “${module.title}” and its ${module.lessons.length} lesson${
+              module.lessons.length === 1 ? '' : 's'
+            }?`}
+            onConfirm={() => {
+              setIsConfirmingDelete(false);
+              onDeleteModule();
+            }}
+            onCancel={() => setIsConfirmingDelete(false)}
+          />
+        </div>
+      )}
 
-          {/* add lesson */}
+      {isExpanded && (
+        <div id={`lessons-${module.id}`} className="space-y-3 px-4 py-4">
+          <SortableContext
+            items={lessonIds}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-2" aria-label={`Lessons in ${module.title}`}>
+              {module.lessons.map((lesson, lessonIndex) => (
+                <LessonRow
+                  key={lesson.id}
+                  lesson={lesson}
+                  index={lessonIndex}
+                  total={module.lessons.length}
+                  isRenaming={renamingLessonId === lesson.id}
+                  isConfirmingDelete={confirmingLessonId === lesson.id}
+                  onStartRename={() => onStartRenameLesson(lesson.id)}
+                  onCancelRename={onCancelRenameLesson}
+                  onRename={(title) => onRenameLesson(lesson.id, title)}
+                  onStartDelete={() => onStartDeleteLesson(lesson.id)}
+                  onCancelDelete={onCancelDeleteLesson}
+                  onDelete={() => onDeleteLesson(lesson.id)}
+                  onMoveUp={() => onMoveLessonUp(lesson.id)}
+                  onMoveDown={() => onMoveLessonDown(lesson.id)}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+
+          {module.lessons.length === 0 && (
+            <p className="rounded-xl border border-dashed border-ink-200 px-4 py-6 text-center text-xs text-ink-500">
+              No lessons yet — add a video, text, quiz or assignment.
+            </p>
+          )}
+
           <div ref={menuRef} className="relative">
             <button
               type="button"
-              onClick={() => setShowLessonMenu((v) => !v)}
-              className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium"
+              onClick={() => setShowTypeMenu((open) => !open)}
               aria-haspopup="menu"
-              aria-expanded={showLessonMenu}
+              aria-expanded={showTypeMenu}
+              className="btn-secondary px-3 py-1.5 text-xs"
             >
-              <Plus className="w-4 h-4" aria-hidden />
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               Add lesson
             </button>
-            {showLessonMenu && (
+
+            {showTypeMenu && (
               <div
                 role="menu"
-                className="absolute left-0 top-full mt-1 z-10 w-40 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1"
+                aria-label={`Add lesson to ${module.title}`}
+                className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-ink-100 bg-white p-1 shadow-lifted"
               >
-                {(Object.keys(LESSON_TYPE_META) as LessonType[]).map((type) => {
+                {LESSON_TYPES.map((type) => {
                   const { label, Icon } = LESSON_TYPE_META[type];
                   return (
                     <button
                       key={type}
-                      role="menuitem"
                       type="button"
-                      onClick={() => { onAddLesson(type); setShowLessonMenu(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      role="menuitem"
+                      onClick={() => {
+                        setShowTypeMenu(false);
+                        onAddLesson(type);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-700 transition-colors hover:bg-ink-50"
                     >
-                      <Icon className="w-4 h-4 text-gray-400" aria-hidden />
-                      {label}
+                      <Icon className="h-4 w-4 text-ink-400" aria-hidden="true" />
+                      {label} lesson
                     </button>
                   );
                 })}
@@ -410,185 +601,415 @@ function ModuleCard({
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-// ── CurriculumBuilder ─────────────────────────────────────────────────────
+// ── builder ────────────────────────────────────────────────────────────────
 
-export function CurriculumBuilder({ courseId, modules: initialModules }: CurriculumBuilderProps) {
+export interface CurriculumBuilderProps {
+  courseId: string;
+  modules: CourseModule[];
+  /** Reports whether the curriculum has unsaved changes to the parent page. */
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+export function CurriculumBuilder({
+  courseId,
+  modules: initialModules,
+  onDirtyChange,
+}: CurriculumBuilderProps) {
   const toast = useToastContext();
   const [modules, setModules] = useState<CourseModule[]>(() =>
-    [...initialModules].sort((a, b) => a.position - b.position),
+    withPositions(initialModules),
   );
-  const [saving, setSaving] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [renamingLessonId, setRenamingLessonId] = useState<string | null>(null);
+  const [confirmingLessonId, setConfirmingLessonId] = useState<string | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoaded = useRef(false);
 
-  // drag-over state for modules
-  const [moduleDragOver, setModuleDragOver] = useState<number | null>(null);
-  const moduleDragSrc = useRef<number | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
+  // Load the persisted structure (which may contain earlier re-orderings).
+  useEffect(() => {
+    let cancelled = false;
+
+    curriculumApi
+      .getModules(courseId, initialModules)
+      .then((loaded) => {
+        if (cancelled) return;
+        setModules(withPositions(loaded));
+        hasLoaded.current = true;
+      })
+      .catch(() => {
+        hasLoaded.current = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, initialModules]);
+
+  // Autosave the structure shortly after any change.
   const scheduleAutosave = useCallback(
-    (updated: CourseModule[]) => {
+    (next: CourseModule[]) => {
+      if (!hasLoaded.current) return;
+
+      onDirtyChange?.(true);
+
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
       autosaveTimer.current = setTimeout(async () => {
-        setSaving(true);
+        setIsSaving(true);
         try {
-          await Promise.all(
-            updated.map((mod, i) =>
-              coursesApi.update(courseId, { modules: updated } as any).catch(() => {}),
-            ),
-          );
+          await curriculumApi.reorderModules(courseId, next);
+          setStatusMessage('Curriculum saved');
+          onDirtyChange?.(false);
+        } catch {
+          setStatusMessage('Could not save the curriculum — try again');
+          toast.error({
+            title: 'Autosave failed',
+            description: 'Your curriculum changes were not saved.',
+          });
         } finally {
-          setSaving(false);
+          setIsSaving(false);
         }
-      }, 1500);
+      }, AUTOSAVE_DELAY_MS);
     },
-    [courseId],
+    [courseId, onDirtyChange, toast],
   );
 
-  const swapModules = (i: number, j: number) => {
-    setModules((prev) => {
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      scheduleAutosave(next);
-      return next;
-    });
-  };
+  useEffect(
+    () => () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    },
+    [],
+  );
 
-  const swapLessons = (moduleIndex: number, i: number, j: number) => {
-    setModules((prev) => {
-      const next = prev.map((m, mi) => {
-        if (mi !== moduleIndex) return m;
-        const lessons = [...m.lessons];
-        [lessons[i], lessons[j]] = [lessons[j], lessons[i]];
-        return { ...m, lessons };
+  const updateModules = useCallback(
+    (updater: (current: CourseModule[]) => CourseModule[]) => {
+      setModules((current) => {
+        const next = withPositions(updater(current));
+        scheduleAutosave(next);
+        return next;
       });
-      scheduleAutosave(next);
-      return next;
-    });
+    },
+    [scheduleAutosave],
+  );
+
+  // ── drag and drop ────────────────────────────────────────────────────────
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
   };
 
-  const handleAddModule = async () => {
-    const title = `Module ${modules.length + 1}`;
-    try {
-      const created = await lessonsApi.createModule(courseId, title, modules.length);
-      setModules((prev) => [...prev, created]);
-    } catch {
-      toast.error({ title: 'Failed to add module' });
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+
+    if (!over || active.id === over.id) return;
+
+    const activeType = active.data.current?.type;
+    const overType = over.data.current?.type;
+    if (activeType !== overType) return;
+
+    if (activeType === 'module') {
+      const from = modules.findIndex((module) => module.id === active.id);
+      const to = modules.findIndex((module) => module.id === over.id);
+      if (from < 0 || to < 0) return;
+
+      const moved = modules[from];
+      updateModules((current) => moveItem(current, from, to));
+      setStatusMessage(
+        `Module “${moved.title}” moved to position ${to + 1} of ${modules.length}`,
+      );
+      return;
     }
-  };
 
-  const handleDeleteModule = (moduleIndex: number) => {
-    setModules((prev) => {
-      const next = prev.filter((_, i) => i !== moduleIndex);
-      scheduleAutosave(next);
-      return next;
-    });
-  };
+    if (activeType === 'lesson') {
+      const moduleId = active.data.current?.moduleId;
+      const overModuleId = over.data.current?.moduleId;
+      // Lessons only reorder inside their own module.
+      if (!moduleId || moduleId !== overModuleId) return;
 
-  const handleRenameModule = (moduleIndex: number, title: string) => {
-    setModules((prev) => {
-      const next = prev.map((m, i) => (i === moduleIndex ? { ...m, title } : m));
-      scheduleAutosave(next);
-      return next;
-    });
-  };
+      const moduleIndex = modules.findIndex((module) => module.id === moduleId);
+      if (moduleIndex < 0) return;
 
-  const handleAddLesson = async (moduleIndex: number, type: LessonType) => {
-    const mod = modules[moduleIndex];
-    const title = `New ${LESSON_TYPE_META[type].label} Lesson`;
-    try {
-      const created = await lessonsApi.createLesson({
-        moduleId: mod.id,
-        title,
-        type,
-        position: mod.lessons.length,
-      });
-      setModules((prev) =>
-        prev.map((m, i) =>
-          i === moduleIndex ? { ...m, lessons: [...m.lessons, created] } : m,
+      const target = modules[moduleIndex];
+      const from = target.lessons.findIndex((lesson) => lesson.id === active.id);
+      const to = target.lessons.findIndex((lesson) => lesson.id === over.id);
+      if (from < 0 || to < 0) return;
+
+      const moved = target.lessons[from];
+      updateModules((current) =>
+        current.map((module, index) =>
+          index === moduleIndex
+            ? { ...module, lessons: moveItem(module.lessons, from, to) }
+            : module,
         ),
       );
-    } catch {
-      toast.error({ title: 'Failed to add lesson' });
+      setStatusMessage(
+        `Lesson “${moved.title}” moved to position ${to + 1} of ${target.lessons.length}`,
+      );
     }
   };
 
-  const handleRenameLesson = (moduleIndex: number, lessonIndex: number, title: string) => {
-    setModules((prev) => {
-      const next = prev.map((m, mi) => {
-        if (mi !== moduleIndex) return m;
-        const lessons = m.lessons.map((l, li) => (li === lessonIndex ? { ...l, title } : l));
-        return { ...m, lessons };
+  // ── keyboard / button reordering ─────────────────────────────────────────
+
+  const moveModule = (moduleId: string, direction: -1 | 1) => {
+    const from = modules.findIndex((module) => module.id === moduleId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= modules.length) return;
+
+    const moved = modules[from];
+    updateModules((current) => moveItem(current, from, to));
+    setStatusMessage(
+      `Module “${moved.title}” moved to position ${to + 1} of ${modules.length}`,
+    );
+  };
+
+  const moveLesson = (moduleId: string, lessonId: string, direction: -1 | 1) => {
+    const moduleIndex = modules.findIndex((module) => module.id === moduleId);
+    if (moduleIndex < 0) return;
+
+    const lessons = modules[moduleIndex].lessons;
+    const from = lessons.findIndex((lesson) => lesson.id === lessonId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= lessons.length) return;
+
+    const moved = lessons[from];
+    updateModules((current) =>
+      current.map((module, index) =>
+        index === moduleIndex
+          ? { ...module, lessons: moveItem(module.lessons, from, to) }
+          : module,
+      ),
+    );
+    setStatusMessage(
+      `Lesson “${moved.title}” moved to position ${to + 1} of ${lessons.length}`,
+    );
+  };
+
+  // ── mutations ────────────────────────────────────────────────────────────
+
+  const handleAddModule = async () => {
+    try {
+      const created = await curriculumApi.createModule(
+        courseId,
+        `Module ${modules.length + 1}`,
+        modules.length,
+      );
+      updateModules((current) => [...current, created]);
+      setStatusMessage(`Module “${created.title}” added`);
+      toast.success({ title: 'Module added', description: created.title });
+    } catch {
+      toast.error({
+        title: 'Could not add module',
+        description: 'Please try again.',
       });
-      scheduleAutosave(next);
-      return next;
+    }
+  };
+
+  const handleAddLesson = async (moduleId: string, type: LessonType) => {
+    const module = modules.find((item) => item.id === moduleId);
+    if (!module) return;
+
+    try {
+      const created = await curriculumApi.createLesson(courseId, moduleId, {
+        title: `New ${LESSON_TYPE_META[type].label} lesson`,
+        type,
+        position: module.lessons.length,
+      });
+      updateModules((current) =>
+        current.map((item) =>
+          item.id === moduleId
+            ? { ...item, lessons: [...item.lessons, created] }
+            : item,
+        ),
+      );
+      setStatusMessage(`Lesson added to ${module.title}`);
+    } catch {
+      toast.error({
+        title: 'Could not add lesson',
+        description: 'Please try again.',
+      });
+    }
+  };
+
+  const handleRenameModule = async (moduleId: string, title: string) => {
+    await curriculumApi.renameModule(courseId, moduleId, title);
+    updateModules((current) =>
+      current.map((module) =>
+        module.id === moduleId ? { ...module, title } : module,
+      ),
+    );
+    setStatusMessage(`Module renamed to “${title}”`);
+  };
+
+  const handleDeleteModule = async (moduleId: string) => {
+    const module = modules.find((item) => item.id === moduleId);
+    await curriculumApi.deleteModule(courseId, moduleId);
+    updateModules((current) => current.filter((item) => item.id !== moduleId));
+    setStatusMessage(`Module “${module?.title ?? ''}” deleted`);
+    toast.success({
+      title: 'Module deleted',
+      description: module?.title,
     });
   };
 
-  const handleDeleteLesson = (moduleIndex: number, lessonIndex: number) => {
-    setModules((prev) => {
-      const next = prev.map((m, mi) => {
-        if (mi !== moduleIndex) return m;
-        return { ...m, lessons: m.lessons.filter((_, li) => li !== lessonIndex) };
-      });
-      scheduleAutosave(next);
-      return next;
-    });
+  const handleRenameLesson = async (
+    moduleId: string,
+    lessonId: string,
+    title: string,
+  ) => {
+    await curriculumApi.renameLesson(courseId, lessonId, title);
+    updateModules((current) =>
+      current.map((module) =>
+        module.id === moduleId
+          ? {
+              ...module,
+              lessons: module.lessons.map((lesson) =>
+                lesson.id === lessonId ? { ...lesson, title } : lesson,
+              ),
+            }
+          : module,
+      ),
+    );
+    setStatusMessage(`Lesson renamed to “${title}”`);
   };
+
+  const handleDeleteLesson = async (moduleId: string, lessonId: string) => {
+    const lesson = modules
+      .find((module) => module.id === moduleId)
+      ?.lessons.find((item) => item.id === lessonId);
+
+    await curriculumApi.deleteLesson(courseId, lessonId);
+    updateModules((current) =>
+      current.map((module) =>
+        module.id === moduleId
+          ? {
+              ...module,
+              lessons: module.lessons.filter((item) => item.id !== lessonId),
+            }
+          : module,
+      ),
+    );
+    setStatusMessage(`Lesson “${lesson?.title ?? ''}” deleted`);
+    toast.success({ title: 'Lesson deleted', description: lesson?.title });
+  };
+
+  const activeDragLabel = useMemo(() => {
+    if (!activeDragId) return null;
+    const module = modules.find((item) => item.id === activeDragId);
+    if (module) return module.title;
+    for (const item of modules) {
+      const lesson = item.lessons.find((entry) => entry.id === activeDragId);
+      if (lesson) return lesson.title;
+    }
+    return null;
+  }, [activeDragId, modules]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">Curriculum</h2>
-        {saving && <span className="text-xs text-gray-400 animate-pulse">Saving…</span>}
+      <p id={INSTRUCTIONS_ID} className="sr-only">
+        To reorder with the keyboard, focus the drag handle and press space to
+        pick up an item, use the arrow keys to move it, then press space again
+        to drop it. Every item also has Move up and Move down buttons.
+      </p>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-semibold text-hamplard-deep">Curriculum</h2>
+          <p className="mt-0.5 text-xs text-ink-500">
+            {modules.length} module{modules.length === 1 ? '' : 's'} ·{' '}
+            {modules.reduce((total, module) => total + module.lessons.length, 0)}{' '}
+            lesson
+            {modules.reduce((total, module) => total + module.lessons.length, 0) === 1
+              ? ''
+              : 's'}
+          </p>
+        </div>
+        <p
+          aria-live="polite"
+          className="text-xs font-medium text-ink-500"
+          data-testid="curriculum-status"
+        >
+          {isSaving ? 'Saving…' : statusMessage}
+        </p>
       </div>
 
-      <div className="space-y-3">
-        {modules.map((mod, mi) => (
-          <div
-            key={mod.id}
-            draggable
-            onDragStart={() => { moduleDragSrc.current = mi; }}
-            onDragOver={(e) => { e.preventDefault(); setModuleDragOver(mi); }}
-            onDragLeave={() => setModuleDragOver(null)}
-            onDrop={() => {
-              if (moduleDragSrc.current !== null && moduleDragSrc.current !== mi) {
-                swapModules(moduleDragSrc.current, mi);
-              }
-              moduleDragSrc.current = null;
-              setModuleDragOver(null);
-            }}
-            onDragEnd={() => { moduleDragSrc.current = null; setModuleDragOver(null); }}
-            className={cn(moduleDragOver === mi && 'ring-2 ring-primary ring-offset-2 rounded-xl')}
-          >
-            <ModuleCard
-              module={mod}
-              isFirst={mi === 0}
-              isLast={mi === modules.length - 1}
-              onMoveUp={() => swapModules(mi, mi - 1)}
-              onMoveDown={() => swapModules(mi, mi + 1)}
-              onRenameModule={(t) => handleRenameModule(mi, t)}
-              onDeleteModule={() => handleDeleteModule(mi)}
-              onAddLesson={(type) => handleAddLesson(mi, type)}
-              onMoveLessonUp={(li) => swapLessons(mi, li, li - 1)}
-              onMoveLessonDown={(li) => swapLessons(mi, li, li + 1)}
-              onRenameLesson={(li, t) => handleRenameLesson(mi, li, t)}
-              onDeleteLesson={(li) => handleDeleteLesson(mi, li)}
-            />
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setActiveDragId(null)}
+      >
+        <SortableContext
+          items={modules.map((module) => module.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-3">
+            {modules.map((module, index) => (
+              <ModuleCard
+                key={module.id}
+                module={module}
+                index={index}
+                total={modules.length}
+                renamingLessonId={renamingLessonId}
+                confirmingLessonId={confirmingLessonId}
+                onRenameModule={(title) => handleRenameModule(module.id, title)}
+                onDeleteModule={() => handleDeleteModule(module.id)}
+                onMoveModuleUp={() => moveModule(module.id, -1)}
+                onMoveModuleDown={() => moveModule(module.id, 1)}
+                onAddLesson={(type) => handleAddLesson(module.id, type)}
+                onRenameLesson={(lessonId, title) =>
+                  handleRenameLesson(module.id, lessonId, title)
+                }
+                onDeleteLesson={(lessonId) => handleDeleteLesson(module.id, lessonId)}
+                onMoveLessonUp={(lessonId) => moveLesson(module.id, lessonId, -1)}
+                onMoveLessonDown={(lessonId) => moveLesson(module.id, lessonId, 1)}
+                onStartRenameLesson={(lessonId) => setRenamingLessonId(lessonId)}
+                onCancelRenameLesson={() => setRenamingLessonId(null)}
+                onStartDeleteLesson={(lessonId) => setConfirmingLessonId(lessonId)}
+                onCancelDeleteLesson={() => setConfirmingLessonId(null)}
+              />
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+
+        <DragOverlay>
+          {activeDragLabel ? (
+            <div className="rounded-xl border border-hamplard-primary bg-white px-4 py-2 text-sm font-medium text-hamplard-deep shadow-lifted">
+              {activeDragLabel}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {modules.length === 0 && (
+        <p className="rounded-2xl border border-dashed border-ink-200 px-4 py-10 text-center text-sm text-ink-500">
+          This course has no modules yet. Add your first one to start building
+          the curriculum.
+        </p>
+      )}
 
       <button
         type="button"
         onClick={handleAddModule}
-        className="flex items-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-4 py-3 text-sm text-gray-500 hover:border-primary hover:text-primary w-full justify-center transition-colors"
+        className="btn-secondary w-full justify-center border-dashed"
       >
-        <Plus className="w-4 h-4" aria-hidden />
+        <Plus className="h-4 w-4" aria-hidden="true" />
         Add module
       </button>
     </div>
   );
 }
+
+export default CurriculumBuilder;

@@ -213,6 +213,7 @@ export function Combobox({
   disabled = false,
   label,
   error,
+  name,
   className,
   maxHeight = "16rem",
   searchable = true,

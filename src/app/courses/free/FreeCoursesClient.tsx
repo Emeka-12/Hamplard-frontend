@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { coursesApi } from '@/lib/api/services';
 import { CourseCard } from '@/components/courses/CourseCard';
+import { CourseCardSkeleton } from '@/components/skeletons/CourseCardSkeleton';
 import { CourseCardSkeleton } from '@/components/skeletons';
 import type { Course } from '@/types';
 

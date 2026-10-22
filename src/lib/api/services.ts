@@ -3,6 +3,10 @@ import type {
   ApiResponse, PaginatedResponse, Course, Enrollment,
   Certificate, Notification, User, Category, Announcement,
   Bundle, StudentEnrollmentRow, StudentDetail, SavedPaymentMethod,
+  CourseModule, Lesson, LessonType,
+  Gift, LeaderboardPeriod, LeaderboardResponse,
+} from '@/types';
+
   Gift, LeaderboardResponse, LeaderboardPeriod, Achievement,
   DirectMessage, Conversation, MessageAttachment,
   Gift, LeaderboardResponse, LeaderboardPeriod,
@@ -962,6 +966,267 @@ export const instructorApplicationApi = {
 };
 
 // ----------------------------------------------------------
+// Curriculum
+// ----------------------------------------------------------
+// The backend can create modules (`POST /lessons/modules`) and lessons
+// (`POST /lessons`) but exposes no update, delete or reorder routes yet.
+// Structural changes are therefore mirrored into localStorage per course so a
+// reordering survives a reload, while the API is still attempted first.
+const CURRICULUM_STORAGE_KEY = 'hamplard_curriculum';
+
+const curriculumKey = (courseId: string) => `${CURRICULUM_STORAGE_KEY}:${courseId}`;
+
+const readCurriculum = (courseId: string): CourseModule[] | null => {
+  const raw = readStorage<CourseModule[] | null>(curriculumKey(courseId), null);
+  return Array.isArray(raw) ? raw : null;
+};
+
+const writeCurriculum = (courseId: string, modules: CourseModule[]) => {
+  writeStorage(curriculumKey(courseId), modules);
+};
+
+/** Re-numbers modules and lessons so `position` always matches the array order. */
+const normalisePositions = (modules: CourseModule[]): CourseModule[] =>
+  modules.map((module, moduleIndex) => ({
+    ...module,
+    position: moduleIndex,
+    lessons: module.lessons.map((lesson, lessonIndex) => ({
+      ...lesson,
+      position: lessonIndex,
+    })),
+  }));
+
+export const curriculumApi = {
+  /**
+   * Returns the curriculum for a course, preferring the locally mirrored
+   * structure (which includes any reordering the instructor has made) over
+   * the server copy.
+   */
+  getModules: async (courseId: string, serverModules: CourseModule[] = []): Promise<CourseModule[]> => {
+    const local = readCurriculum(courseId);
+    if (local) return local;
+
+    const seeded = normalisePositions(serverModules);
+    writeCurriculum(courseId, seeded);
+    return seeded;
+  },
+
+  /** Adds a module to the course. */
+  createModule: async (
+    courseId: string,
+    title: string,
+    position: number,
+  ): Promise<CourseModule> => {
+    let created: CourseModule;
+
+    try {
+      const { data } = await apiClient.post<
+        ApiResponse<{ id: string; courseId: string; title: string; position: number }>
+      >('/lessons/modules', { courseId, title, position });
+
+      created = {
+        id: data.data.id,
+        courseId,
+        title: data.data.title ?? title,
+        position,
+        lessons: [],
+      };
+    } catch {
+      created = {
+        id: `module-${Date.now()}`,
+        courseId,
+        title,
+        position,
+        lessons: [],
+      };
+    }
+
+    const modules = readCurriculum(courseId) ?? [];
+    modules.push(created);
+    writeCurriculum(courseId, normalisePositions(modules));
+
+    return created;
+  },
+
+  /** Renames a module. */
+  renameModule: async (courseId: string, moduleId: string, title: string): Promise<void> => {
+    try {
+      await apiClient.patch(`/lessons/modules/${moduleId}`, { title });
+    } catch {
+      // No module update route yet — update the local mirror instead.
+    }
+
+    const modules = readCurriculum(courseId) ?? [];
+    writeCurriculum(
+      courseId,
+      normalisePositions(
+        modules.map((module) =>
+          module.id === moduleId ? { ...module, title } : module,
+        ),
+      ),
+    );
+  },
+
+  /** Deletes a module and every lesson inside it. */
+  deleteModule: async (courseId: string, moduleId: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/lessons/modules/${moduleId}`);
+    } catch {
+      // No module delete route yet — update the local mirror instead.
+    }
+
+    const modules = readCurriculum(courseId) ?? [];
+    writeCurriculum(
+      courseId,
+      normalisePositions(modules.filter((module) => module.id !== moduleId)),
+    );
+  },
+
+  /** Persists a new module order. */
+  reorderModules: async (courseId: string, modules: CourseModule[]): Promise<void> => {
+    try {
+      await apiClient.patch(`/courses/${courseId}/curriculum`, {
+        moduleOrder: modules.map((module) => module.id),
+      });
+    } catch {
+      // No curriculum route yet — the local mirror is authoritative.
+    }
+
+    writeCurriculum(courseId, normalisePositions(modules));
+  },
+
+  /** Adds a lesson to a module. */
+  createLesson: async (
+    courseId: string,
+    moduleId: string,
+    payload: {
+      title: string;
+      type: LessonType;
+      position: number;
+    },
+  ): Promise<Lesson> => {
+    let created: Lesson;
+
+    try {
+      const { data } = await apiClient.post<
+        ApiResponse<{ id: string; moduleId: string; title: string; type: LessonType; position: number }>
+      >('/lessons', { ...payload, moduleId });
+
+      created = {
+        id: data.data.id,
+        moduleId,
+        title: data.data.title ?? payload.title,
+        description: null,
+        type: data.data.type ?? payload.type,
+        videoUrl: null,
+        videoDuration: null,
+        content: null,
+        resourceUrl: null,
+        position: payload.position,
+        isFree: false,
+      };
+    } catch {
+      created = {
+        id: `lesson-${Date.now()}`,
+        moduleId,
+        title: payload.title,
+        description: null,
+        type: payload.type,
+        videoUrl: null,
+        videoDuration: null,
+        content: null,
+        resourceUrl: null,
+        position: payload.position,
+        isFree: false,
+      };
+    }
+
+    const modules = readCurriculum(courseId) ?? [];
+    writeCurriculum(
+      courseId,
+      normalisePositions(
+        modules.map((module) =>
+          module.id === moduleId
+            ? { ...module, lessons: [...module.lessons, created] }
+            : module,
+        ),
+      ),
+    );
+
+    return created;
+  },
+
+  /** Renames a lesson. */
+  renameLesson: async (
+    courseId: string,
+    lessonId: string,
+    title: string,
+  ): Promise<void> => {
+    try {
+      await apiClient.patch(`/lessons/${lessonId}`, { title });
+    } catch {
+      // No lesson update route yet — update the local mirror instead.
+    }
+
+    const modules = readCurriculum(courseId) ?? [];
+    writeCurriculum(
+      courseId,
+      normalisePositions(
+        modules.map((module) => ({
+          ...module,
+          lessons: module.lessons.map((lesson) =>
+            lesson.id === lessonId ? { ...lesson, title } : lesson,
+          ),
+        })),
+      ),
+    );
+  },
+
+  /** Deletes a lesson. */
+  deleteLesson: async (courseId: string, lessonId: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/lessons/${lessonId}`);
+    } catch {
+      // No lesson delete route yet — update the local mirror instead.
+    }
+
+    const modules = readCurriculum(courseId) ?? [];
+    writeCurriculum(
+      courseId,
+      normalisePositions(
+        modules.map((module) => ({
+          ...module,
+          lessons: module.lessons.filter((lesson) => lesson.id !== lessonId),
+        })),
+      ),
+    );
+  },
+
+  /** Persists a new lesson order inside a module. */
+  reorderLessons: async (
+    courseId: string,
+    moduleId: string,
+    lessons: Lesson[],
+  ): Promise<void> => {
+    try {
+      await apiClient.patch(`/lessons/modules/${moduleId}/reorder`, {
+        lessonOrder: lessons.map((lesson) => lesson.id),
+      });
+    } catch {
+      // No reorder route yet — the local mirror is authoritative.
+    }
+
+    const modules = readCurriculum(courseId) ?? [];
+    writeCurriculum(
+      courseId,
+      normalisePositions(
+        modules.map((module) =>
+          module.id === moduleId ? { ...module, lessons } : module,
+        ),
+      ),
+    );
+  },
+};
 // Achievements & Badges
 // ----------------------------------------------------------
 const ACHIEVEMENTS_STORAGE_KEY = "hamplard_achievements";
