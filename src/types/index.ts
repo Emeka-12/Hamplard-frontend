@@ -430,6 +430,53 @@ export interface StudentDetail {
   }>;
 }
 
+// ── Achievements & Badges ─────────────────────────────────────────
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  criteria: string;
+  icon: string;
+  category: 'learning' | 'streak' | 'certificates' | 'community';
+  earned: boolean;
+  earnedAt?: string | null;
+  progress?: number;
+  rarity?: 'common' | 'rare' | 'epic' | 'legendary';
+}
+
+// ── Student Messages ──────────────────────────────────────────────
+export interface MessageAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  size?: number;
+}
+
+export interface DirectMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string | null;
+  senderRole: 'STUDENT' | 'INSTRUCTOR';
+  content: string;
+  attachments?: MessageAttachment[];
+  createdAt: string;
+  read: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  participantId: string;
+  participantName: string;
+  participantAvatar?: string | null;
+  participantRole: 'STUDENT' | 'INSTRUCTOR';
+  courseId?: string;
+  courseTitle?: string;
+  lastMessage?: DirectMessage;
+  unreadCount: number;
+  updatedAt: string;
 // ── Student Project Showcase Gallery (Issue #400) ──────────────────────────
 
 export interface ShowcaseComment {
