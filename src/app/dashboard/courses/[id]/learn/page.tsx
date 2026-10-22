@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   CheckCircle2, Circle, ChevronDown, ChevronRight,
   Download, Loader2, ArrowLeft, Award, SkipForward, MessageSquare, Lock,
@@ -44,6 +44,10 @@ export default function LearnPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const lessonParam = searchParams.get('lesson');
+  // Captured once so the initial load does not re-run on every lesson change
+  const initialLessonRef = useRef<string | null>(lessonParam);
   const toast = useToast();
   // requestedLessonId reserved for future deep-link support
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -59,6 +63,7 @@ export default function LearnPage() {
   const [markError, setMarkError] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("lessons");
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // ── Autoplay state ───────────────────────────────────────────────────────
   const [autoplay, setAutoplay] = useState<boolean>(() => {
@@ -101,7 +106,10 @@ export default function LearnPage() {
   // selectLesson: named alias for setActiveLesson used in QuizComponent onContinue
   const selectLesson = useCallback((lesson: Lesson) => {
     setActiveLesson(lesson);
-  }, []);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('lesson', lesson.id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [router, pathname, searchParams]);
 
   // ── Persist autoplay preference ──────────────────────────────────────────
   const handleAutoplayChange = useCallback((enabled: boolean) => {
@@ -137,6 +145,8 @@ export default function LearnPage() {
       }
     }
     setShowCountdown(false);
+    selectLesson(nextLesson);
+  }, [nextLesson, selectLesson]);
     setActiveLesson(nextLesson);
   }, [nextLesson, course, completedIds, toast]);
 
@@ -161,6 +171,16 @@ export default function LearnPage() {
       const completedSet = new Set(
         e.lessonProgress?.filter((p: { completed: boolean }) => p.completed).map((p: { lessonId: string }) => p.lessonId),
       );
+      const requested = initialLessonRef.current
+        ? allLessons.find((l) => l.id === initialLessonRef.current)
+        : undefined;
+      const first = requested ?? allLessons.find((l) => !completedIds.has(l.id)) ?? allLessons[0];
+      if (first) {
+        setActiveLesson(first);
+        const owner = c.modules?.find((m) => m.lessons.some((l) => l.id === first.id));
+        const open = owner ?? c.modules?.[0];
+        if (open) setExpanded({ [open.id]: true });
+      }    })
       const first = allLessons.find((l) => {
         if (completedSet.has(l.id)) return false;
         const modIdx = c.modules?.findIndex((m) => m.lessons.some((ml) => ml.id === l.id)) ?? -1;
@@ -231,6 +251,17 @@ export default function LearnPage() {
     setMarkError(null);
   }, [activeLesson]);
 
+  // Follow ?lesson= changes (back/forward, manual URL edits)
+  useEffect(() => {
+    if (!course || !lessonParam || activeLesson?.id === lessonParam) return;
+    const match = flatLessons(course).find((l) => l.id === lessonParam);
+    if (!match) return;
+    setActiveLesson(match);
+    const owner = course.modules?.find((m) => m.lessons.some((l) => l.id === match.id));
+    if (owner) setExpanded((p) => ({ ...p, [owner.id]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonParam, course]);
+
   // ── Helpers ──────────────────────────────────────────────────────────────
   const isLessonCompleted = (lessonId: string) =>
     enrollment?.lessonProgress?.some(
@@ -295,7 +326,25 @@ export default function LearnPage() {
       )}
 
       {/* ── Lesson sidebar ──────────────────────────────────────────────── */}
-      <aside className="w-72 bg-white border-r border-ink-100 flex flex-col flex-shrink-0 overflow-y-auto">
+      <button
+        type="button"
+        onClick={() => setSidebarOpen((o) => !o)}
+        aria-expanded={sidebarOpen}
+        aria-controls="learn-curriculum"
+        className="md:hidden flex flex-shrink-0 items-center justify-between border-b border-ink-100 bg-white px-4 py-3 text-sm font-medium text-ink-700"
+      >
+        <span>Course content</span>
+        {sidebarOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+      </button>
+
+      <aside
+        id="learn-curriculum"
+        className={cn(
+          sidebarOpen ? 'flex' : 'hidden',
+          'md:flex w-full max-h-[40vh] md:max-h-none md:w-72 flex-col flex-shrink-0 overflow-y-auto',
+          'bg-white border-b border-ink-100 md:border-b-0 md:border-r',
+        )}
+      >
         {/* Header */}
         <div className="p-4 border-b border-ink-100">
           <Link
@@ -376,6 +425,7 @@ export default function LearnPage() {
                       return (
                         <button
                           key={lesson.id}
+                          onClick={() => selectLesson(lesson)}
                           onClick={() => {
                             if (isLocked) {
                               toast.warning({
