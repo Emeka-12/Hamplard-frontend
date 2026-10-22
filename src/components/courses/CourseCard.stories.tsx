@@ -35,7 +35,7 @@ const mockCourse: Course = {
   previewVideoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
   modules: [],
   _count: { enrollments: 3500 },
-};
+} as unknown as Course;
 
 const meta = {
   title: 'Components/CourseCard',

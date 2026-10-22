@@ -220,6 +220,7 @@ export function Combobox({
   searchPlaceholder = "Search...",
   clearable = true,
   onOpenChange,
+  name,
   "aria-describedby": ariaDescribedBy,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
