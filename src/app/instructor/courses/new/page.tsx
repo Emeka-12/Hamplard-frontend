@@ -37,6 +37,8 @@ interface SectionDraft {
   title: string;
   lessons: LessonDraft[];
   collapsed: boolean;
+  unlockRule?: 'immediate' | 'prerequisite' | 'date';
+  releaseDate?: string | null;
 }
 
 interface CourseFormData {
@@ -76,7 +78,14 @@ function uid() {
 }
 
 function emptySection(): SectionDraft {
-  return { id: uid(), title: '', lessons: [], collapsed: false };
+  return {
+    id: uid(),
+    title: '',
+    lessons: [],
+    collapsed: false,
+    unlockRule: 'immediate',
+    releaseDate: null,
+  };
 }
 
 function emptyLesson(): LessonDraft {
@@ -292,6 +301,7 @@ function SectionBlock({
   section, index, total,
   onUpdateTitle, onToggleCollapse, onAddLesson, onRemoveSection,
   onUpdateLesson, onRemoveLesson, onDragStart, onDragOver, onDrop,
+  onUpdateSection,
 }: {
   section: SectionDraft; index: number; total: number;
   onUpdateTitle: (id: string, title: string) => void;
@@ -303,6 +313,7 @@ function SectionBlock({
   onDragStart: (e: React.DragEvent, sId: string, lId: string) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, sId: string, lId: string) => void;
+  onUpdateSection: (id: string, patch: Partial<SectionDraft>) => void;
 }) {
   return (
     <div className="card overflow-hidden">
@@ -341,6 +352,38 @@ function SectionBlock({
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
+        )}
+      </div>
+
+      {/* Unlock rule selector */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-ink-50/50 border-b border-ink-100 text-xs">
+        <span className="font-medium text-ink-500">Unlock rule:</span>
+        <select
+          value={section.unlockRule || 'immediate'}
+          onChange={(e) =>
+            onUpdateSection(section.id, {
+              unlockRule: e.target.value as SectionDraft['unlockRule'],
+            })
+          }
+          className="border border-ink-200 rounded-lg px-2 py-1 bg-white text-ink-700 text-xs focus:outline-none"
+        >
+          <option value="immediate">Immediate (Unlocked on enroll)</option>
+          <option value="prerequisite">Prerequisite (Unlock after previous section)</option>
+          <option value="date">Release Date (Drip content)</option>
+        </select>
+
+        {section.unlockRule === 'date' && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-ink-400">Date:</span>
+            <input
+              type="date"
+              value={section.releaseDate || ''}
+              onChange={(e) =>
+                onUpdateSection(section.id, { releaseDate: e.target.value })
+              }
+              className="border border-ink-200 rounded-lg px-2 py-1 bg-white text-ink-700 text-xs"
+            />
+          </div>
         )}
       </div>
 
@@ -410,6 +453,9 @@ function Step2({
         : sec,
     ));
 
+  const updateSection = (id: string, patch: Partial<SectionDraft>) =>
+    updateSections((s) => s.map((sec) => sec.id === id ? { ...sec, ...patch } : sec));
+
   const removeLesson = (sId: string, lId: string) =>
     updateSections((s) => s.map((sec) =>
       sec.id === sId ? { ...sec, lessons: sec.lessons.filter((l) => l.id !== lId) } : sec,
@@ -468,6 +514,7 @@ function Step2({
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          onUpdateSection={updateSection}
         />
       ))}
 
@@ -889,7 +936,14 @@ export default function NewCoursePage() {
       for (let si = 0; si < data.sections.length; si++) {
         const sec = data.sections[si];
         if (!sec.title && sec.lessons.length === 0) continue;
-        const module = await lessonsApi.createModule(courseId, sec.title || `Section ${si + 1}`, si + 1);
+        const module = await lessonsApi.createModule(
+          courseId,
+          sec.title || `Section ${si + 1}`,
+          si + 1,
+          sec.unlockRule || 'immediate',
+          null,
+          sec.releaseDate || null,
+        );
         for (let li = 0; li < sec.lessons.length; li++) {
           const lesson = sec.lessons[li];
           await lessonsApi.createLesson({

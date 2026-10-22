@@ -14,6 +14,7 @@ import {
   User,
   Settings,
   Trophy,
+  ClipboardCheck,
   ChevronLeft,
   ChevronRight,
   type LucideIcon,
@@ -43,13 +44,10 @@ const STUDENT_NAV: NavItem[] = [
 ];
 
 const INSTRUCTOR_NAV: NavItem[] = [
-  { href: '/dashboard/instructor',  label: 'Dashboard',      icon: BarChart2 },
-  { href: '/dashboard/courses',     label: 'My Courses',     icon: BookOpen },
-  { href: '/dashboard/courses/create', label: 'New Course',  icon: Video },
-const INSTRUCTOR_NAV = [
   { href: '/dashboard/instructor', label: 'Dashboard', icon: BarChart2 },
   { href: '/dashboard/instructor/courses', label: 'My Courses', icon: BookOpen },
   { href: '/dashboard/courses/create', label: 'New Course', icon: Video },
+  { href: '/dashboard/instructor/assignments', label: 'Assignments', icon: ClipboardCheck },
   { href: '/dashboard/instructor/announcements', label: 'Announcements', icon: Bell },
   { href: '/notifications', label: 'Notifications', icon: Bell },
 ];
