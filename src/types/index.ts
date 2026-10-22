@@ -138,9 +138,10 @@ export interface Course {
   createdAt: string;
   updatedAt: string;
   instructor: {
+    id?: string;
     name: string | null;
-    stellarAddress: string;
-    avatarUrl: string | null;
+    stellarAddress?: string;
+    avatarUrl?: string | null;
     bio?: string | null;
   };
   modules: CourseModule[];

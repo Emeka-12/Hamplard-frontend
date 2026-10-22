@@ -4,7 +4,7 @@ import { formatUsdc, courseTotalMins } from '@/lib/utils';
 import type { Course } from '@/types';
 import RecentlyViewedTracker from '@/components/courses/RecentlyViewedTracker';
 import { Breadcrumb } from '@/components/ui';
-import CurriculumAccordion from '@/components/courses/CurriculumAccordion';
+import { CurriculumAccordion } from '@/components/courses/CurriculumAccordion';
 
 // Metadata and JSON-LD are handled by the server layout at
 // src/app/courses/[id]/layout.tsx — no need to duplicate them here.

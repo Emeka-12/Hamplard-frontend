@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Check, Clock, Play, ListChecks } from 'lucide-react';
+import { Check, Clock, Play, ListChecks, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { stepChecklistApi } from '@/lib/api/services';
+import { Lightbox } from '@/components/ui/Lightbox';
 import type { LessonStep } from '@/types';
 
 export interface StepChecklistProps {
@@ -48,6 +49,18 @@ export function StepChecklist({
     }
     return new Set();
   });
+
+  const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+
+  const stepImages = useMemo(() => {
+    return steps
+      .filter((s): s is LessonStep & { imageUrl: string } => !!s.imageUrl)
+      .map((s) => ({
+        src: s.imageUrl,
+        title: s.title,
+        description: s.description ?? undefined,
+      }));
+  }, [steps]);
 
   // Re-sync with localStorage and API when lessonId changes
   useEffect(() => {
@@ -236,22 +249,42 @@ export function StepChecklist({
                   </p>
                 )}
 
-                {/* Optional image preview */}
+                {/* Optional image preview with zoom lightbox trigger */}
                 {step.imageUrl && (
-                  <div className="mt-2.5 overflow-hidden rounded-lg border border-ink-100 max-w-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idx = stepImages.findIndex((img) => img.src === step.imageUrl);
+                      setActiveImageIndex(idx >= 0 ? idx : 0);
+                    }}
+                    className="group relative mt-2.5 overflow-hidden rounded-lg border border-ink-100 max-w-xs block text-left focus:outline-none focus:ring-2 focus:ring-hamplard-primary"
+                    aria-label={`Enlarge image for ${step.title}`}
+                  >
                     <img
                       src={step.imageUrl}
                       alt={step.title}
-                      className="w-full h-auto object-cover max-h-48"
+                      className="w-full h-auto object-cover max-h-48 transition-transform duration-200 group-hover:scale-105"
                       loading="lazy"
                     />
-                  </div>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <span className="p-1.5 rounded-full bg-black/60 text-white shadow-sm">
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  </button>
                 )}
               </div>
             </li>
           );
         })}
       </ol>
+
+      <Lightbox
+        images={stepImages}
+        initialIndex={activeImageIndex ?? 0}
+        isOpen={activeImageIndex !== null}
+        onClose={() => setActiveImageIndex(null)}
+      />
     </div>
   );
 }

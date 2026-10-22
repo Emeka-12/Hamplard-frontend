@@ -1,5 +1,15 @@
 import { apiClient } from "./client";
 import type {
+  ApiResponse, PaginatedResponse, Course, Enrollment,
+  Certificate, Notification, User, Category, Announcement,
+  Bundle, StudentEnrollmentRow, StudentDetail, SavedPaymentMethod,
+  Gift, LeaderboardResponse, LeaderboardPeriod,
+} from '@/types';
+
+const isBrowser = typeof window !== "undefined";
+const ANNOUNCEMENTS_STORAGE_KEY = "hamplard_announcements";
+const NOTIFICATIONS_STORAGE_KEY = "hamplard_notifications";
+const PAYMENT_METHODS_STORAGE_KEY = "hamplard_payment_methods";
   ApiResponse,
   PaginatedResponse,
   Course,
