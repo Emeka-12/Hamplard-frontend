@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CourseCard } from './CourseCard';
 import { CourseCardSkeleton } from '@/components/skeletons/CourseCardSkeleton';
+import { CourseCardSkeleton } from '@/components/skeletons';
 import type { Course } from '@/types';
 
 interface Props {
@@ -153,7 +154,7 @@ export function CourseCardGrid({
         }}
       >
         {loading
-          ? visibleItems.map((i) => <CourseCardSkeleton key={i} />)
+          ? (visibleItems as number[]).map((i) => <CourseCardSkeleton key={i} />)
           : (visibleItems as Course[]).map((course, index) => (
               <CourseCard
                 key={course.id}

@@ -66,8 +66,7 @@ const mockCourse: Course = {
   status: 'ACTIVE',
   badge: 'bestseller',
   createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
+} as unknown as Course;
 
 // jsdom does not implement window.matchMedia — stub it so the hover-prefetch
 // hook can detect pointer devices. Defaults to a fine-pointer (desktop) device.
